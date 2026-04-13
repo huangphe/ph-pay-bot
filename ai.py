@@ -19,12 +19,18 @@ logger = logging.getLogger(__name__)
 
 async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
     """
-    使用 Gemini Vision 辨識發票照片
-    返回格式：{"amount": 100, "note": "晚餐", "success": True}
+    使用 Gemini Vision 辨識發票照片 (具備自動備案機制)
     """
-    if not model:
-        logger.error("GEMINI_API_KEY 未設定，無法使用拍照記帳")
+    if not genai:
+        logger.error("Gemini SDK 未載入")
         return None
+
+    # 嘗試模型清單，按優先順序排列
+    models_to_try = [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp"
+    ]
 
     prompt = (
         "你是一個記帳助手。請從這張發票或收據照片中提取以下資訊：\n"
@@ -33,42 +39,39 @@ async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
         "\n"
         "請只返回 JSON 格式，不要有其他文字說明。格式如下：\n"
         "{\"amount\": 123, \"note\": \"說明內容\"}\n"
-        "如果辨識不出金額，請返回 {\"amount\": null, \"note\": \"辨識失敗\"}"
     )
 
-    try:
-        logger.info("正在連線 Gemini API 進行辨識...")
-        # Gemini API 調用
-        response = model.generate_content([
-            prompt,
-            {"mime_type": "image/jpeg", "data": image_bytes}
-        ])
-        
-        text = response.text.strip()
-        logger.info(f"Gemini 原始回應: {text}")
-
-        # 清除可能存在的 markdown code block 標籤
-        if text.startswith("```json"):
-            text = text.replace("```json", "").replace("```", "").strip()
-        elif text.startswith("```"):
-            text = text.replace("```", "").strip()
-
-        import json
+    last_error = None
+    for model_name in models_to_try:
         try:
-            data = json.loads(text)
-        except Exception as json_err:
-            logger.error(f"JSON 解析失敗: {json_err}. 原始文字: {text}")
-            return None
-        
-        if data.get("amount") is not None:
-            return {
-                "amount": float(data["amount"]),
-                "note": data.get("note", "發票記帳"),
-                "success": True
-            }
-        logger.warning(f"AI 回應中缺少金額資訊: {data}")
-        return None
+            logger.info(f"正在嘗試模型 {model_name} 進行辨識...")
+            current_model = genai.GenerativeModel(model_name)
+            response = current_model.generate_content([
+                prompt,
+                {"mime_type": "image/jpeg", "data": image_bytes}
+            ])
+            
+            text = response.text.strip()
+            logger.info(f"模型 {model_name} 回應: {text}")
 
-    except Exception as e:
-        logger.error(f"Gemini API 辨識錯誤: {e}")
-        return None
+            if text.startswith("```json"):
+                text = text.replace("```json", "").replace("```", "").strip()
+            elif text.startswith("```"):
+                text = text.replace("```", "").strip()
+
+            import json
+            data = json.loads(text)
+            
+            if data.get("amount") is not None:
+                return {
+                    "amount": float(data["amount"]),
+                    "note": data.get("note", "發票記帳"),
+                    "success": True
+                }
+        except Exception as e:
+            last_error = e
+            logger.warning(f"模型 {model_name} 失敗: {e}")
+            continue # 嘗試下一個模型
+
+    logger.error(f"所有模型皆辨識失敗。最後一個錯誤: {last_error}")
+    return None
