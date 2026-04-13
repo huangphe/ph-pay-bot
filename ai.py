@@ -37,6 +37,7 @@ async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
     )
 
     try:
+        logger.info("正在連線 Gemini API 進行辨識...")
         # Gemini API 調用
         response = model.generate_content([
             prompt,
@@ -44,6 +45,8 @@ async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
         ])
         
         text = response.text.strip()
+        logger.info(f"Gemini 原始回應: {text}")
+
         # 清除可能存在的 markdown code block 標籤
         if text.startswith("```json"):
             text = text.replace("```json", "").replace("```", "").strip()
@@ -51,7 +54,11 @@ async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
             text = text.replace("```", "").strip()
 
         import json
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except Exception as json_err:
+            logger.error(f"JSON 解析失敗: {json_err}. 原始文字: {text}")
+            return None
         
         if data.get("amount") is not None:
             return {
@@ -59,6 +66,7 @@ async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
                 "note": data.get("note", "發票記帳"),
                 "success": True
             }
+        logger.warning(f"AI 回應中缺少金額資訊: {data}")
         return None
 
     except Exception as e:
