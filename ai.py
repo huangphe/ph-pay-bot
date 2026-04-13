@@ -25,11 +25,11 @@ async def analyze_receipt(image_bytes: bytes) -> Optional[Dict]:
         logger.error("Gemini SDK 未載入")
         return None
 
-    # 嘗試模型清單，優先使用最新的 2.0
+    # 嘗試模型清單，切換至 2026 最新 3.0 系列
     models_to_try = [
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
+        "gemini-3-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3-pro"
     ]
 
     prompt = (
