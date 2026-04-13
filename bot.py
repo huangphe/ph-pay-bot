@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters,
@@ -92,7 +92,24 @@ async def parse_quick_add(text: str) -> dict | None:
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_allowed(update.effective_user.id): return
-    await update.message.reply_text("👋 *夫妻記帳本* 已就緒！\n\n可輸入 `100 晚餐` 或直接傳送發票照片。", parse_mode="Markdown")
+    
+    welcome_text = (
+        "👋 *歡迎使用夫妻記帳本！*\n\n"
+        "這是您的專屬記帳助理，支援以下輸入方式：\n\n"
+        "📖 *快速記帳*\n"
+        "• 直接輸入 `100 晚餐` 或 `便當 120` (順序不受限)\n"
+        "• 支援一次多筆：以換行或逗號分隔，例如：\n"
+        "  `50 飲料` \n"
+        "  `150 午餐` \n\n"
+        "📸 *拍照辨識*\n"
+        "• 傳送發票或收據照片，AI 會自動辨識金額並紀錄。\n\n"
+        "📊 *系統指令*\n"
+        "• /today - 查看今日消費統計\n"
+        "• /del - 刪除最後一筆紀錄\n"
+        "• /id - 查看個人 Telegram ID\n\n"
+        f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL})"
+    )
+    await update.message.reply_text(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def cmd_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f"👤 user_id: `{update.effective_user.id}`", parse_mode="Markdown")
@@ -169,11 +186,22 @@ t_app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 啟動時設定 Webhook
+    # 1. 註冊指令選單 (輸入 / 會自動跳出)
+    commands = [
+        BotCommand("today", "📊 查看今日消費摘要"),
+        BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
+        BotCommand("id", "👤 查看您的 Telegram ID"),
+        BotCommand("start", "🏠 顯示使用幫助")
+    ]
+    await t_app.bot.set_my_commands(commands)
+    logger.info("已更新 Telegram 指令選單")
+
+    # 2. 啟動時設定 Webhook
     if RENDER_EXTERNAL_URL:
         webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
         logger.info(f"正在設定 Webhook: {webhook_url}")
         await t_app.bot.set_webhook(url=webhook_url)
+    
     await t_app.initialize()
     await t_app.start()
     yield
