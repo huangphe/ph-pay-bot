@@ -8,8 +8,8 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # 使用 1.5 Flash 速度快且免費額度高
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")
+    # 使用最新的 2.0 Flash (Experimental) 辨識更強更準
+    model = genai.GenerativeModel("gemini-2.0-flash-exp")
 else:
     model = None
 
