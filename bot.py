@@ -133,7 +133,7 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     status_msg = await update.message.reply_text("🔍 *正在辨識發票...*", parse_mode="Markdown")
     try:
         file = await photo.get_file()
-        img_bytes = await file.download_to_memory()
+        img_bytes = await file.download_to_memory(bytearray())
         result = await ai.analyze_receipt(bytes(img_bytes))
         if result and result["success"]:
             auto_cat = classifier.classify(result["note"])
