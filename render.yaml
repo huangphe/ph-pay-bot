@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: ph-pay-bot
+    runtime: docker
+    plan: free
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        value: https://tgsjxkleioivufbozfgw.supabase.co
+      - key: SUPABASE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnc2p4a2xlaW9pdnVmYm96Zmd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5ODQ2NTksImV4cCI6MjA5MTU2MDY1OX0.i3YOmWXHNAQ1zkeHpdy7TZUPwTwj-O1jzKueDTMOu0s
+      - key: GEMINI_API_KEY
+        value: AIzaSyB-rBMqN6CABVhiSot5yed6HyD4esnJlq0
+      - key: ALLOWED_USER_IDS
+        value: 5725029188,8514343851
+      - key: DASHBOARD_URL
+        value: https://dashboard-eight-woad-51.vercel.app
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          name: ph-pay-bot
+          type: web
+          property: host
