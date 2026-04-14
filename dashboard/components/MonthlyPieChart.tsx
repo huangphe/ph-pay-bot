@@ -11,6 +11,21 @@ interface DataItem {
   color: string;
 }
 
+const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, icon, value }: any) => {
+  if (percent < 0.05) return null;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.65;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const displayVal = value >= 1000 ? `${(value/1000).toFixed(1).replace('.0', '')}k` : value;
+
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>
+      {icon} {displayVal}
+    </text>
+  );
+};
+
 export default function MonthlyPieChart({ data }: { data: DataItem[] }) {
   if (!data.length) return null;
   return (
@@ -24,6 +39,8 @@ export default function MonthlyPieChart({ data }: { data: DataItem[] }) {
           outerRadius={105}
           paddingAngle={3}
           dataKey="value"
+          labelLine={false}
+          label={renderCustomLabel}
         >
           {data.map((entry, i) => (
             <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.04)" strokeWidth={1} />

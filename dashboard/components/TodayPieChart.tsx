@@ -11,15 +11,17 @@ interface DataItem {
   color: string;
 }
 
-const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, icon }: any) => {
+const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, icon, value }: any) => {
   if (percent < 0.05) return null;
   const RADIAN = Math.PI / 180;
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.65;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const displayVal = value >= 1000 ? `${(value/1000).toFixed(1).replace('.0', '')}k` : value;
+
   return (
-    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={13} fontWeight={700}>
-      {icon}
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>
+      {icon} {displayVal}
     </text>
   );
 };
