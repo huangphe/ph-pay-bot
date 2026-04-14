@@ -48,7 +48,7 @@ export function getCatMeta(cat: string) {
 
 export const USER_MAP: Record<string, string> = {
   "5725029188": "@HAO",
-  // 若有其他人的 ID 可補在此處
+  "8514343851": "@WU",
 };
 
 export function getDisplayName(expense: { user_id: string | number; user_name: string }) {

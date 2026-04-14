@@ -54,6 +54,7 @@ export default function TodayPieChart({ data }: { data: DataItem[] }) {
             fontSize: "12px",
             fontWeight: 700,
           }}
+          itemStyle={{ color: "#e4e4e7" }}
         />
         <Legend
           formatter={(value) => (

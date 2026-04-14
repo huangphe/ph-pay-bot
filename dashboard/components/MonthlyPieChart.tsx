@@ -39,6 +39,7 @@ export default function MonthlyPieChart({ data }: { data: DataItem[] }) {
             fontSize: "12px",
             fontWeight: 700,
           }}
+          itemStyle={{ color: "#e4e4e7" }}
         />
         <Legend
           iconType="circle"
