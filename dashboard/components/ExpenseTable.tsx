@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Expense, fmtMoney, getCatMeta, updateExpense, getDisplayName } from "@/lib/supabase";
+import { Expense, fmtMoney, getCatMeta, updateExpense, deleteExpense, getDisplayName } from "@/lib/supabase";
 import { format } from "date-fns";
 
 interface ExpenseTableProps {
@@ -18,6 +18,21 @@ export default function ExpenseTable({ initialExpenses, showDate = false }: Expe
     note: string;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("確定要刪除這筆紀錄嗎？此動作無法復原。")) return;
+    setDeletingId(id);
+    try {
+      await deleteExpense(id);
+      setExpenses(expenses.filter(e => e.id !== id));
+    } catch (err) {
+      console.error("Failed to delete expense:", err);
+      alert("刪除失敗，請稍後再試。");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const startEdit = (e: Expense) => {
     setEditingId(e.id);
@@ -120,13 +135,24 @@ export default function ExpenseTable({ initialExpenses, showDate = false }: Expe
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => startEdit(e)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand-500 text-[10px] font-black text-white hover:bg-brand-400 transition-all shadow-lg shadow-brand-500/20 uppercase tracking-widest"
-                    >
-                      <span>✏️</span>
-                      <span>編輯</span>
-                    </button>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => startEdit(e)}
+                        disabled={deletingId === e.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-brand-500 text-[10px] font-black text-white hover:bg-brand-400 transition-all shadow-lg shadow-brand-500/20 uppercase tracking-widest disabled:opacity-50"
+                      >
+                        <span>✏️</span>
+                        <span className="hidden sm:inline">編輯</span>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(e.id)}
+                        disabled={deletingId === e.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-red-500/10 text-[10px] font-black text-red-500 hover:bg-red-500 hover:text-white transition-all uppercase tracking-widest disabled:opacity-50"
+                      >
+                        <span>{deletingId === e.id ? "⏳" : "🗑️"}</span>
+                        <span className="hidden sm:inline">刪除</span>
+                      </button>
+                    </div>
                   )}
                 </td>
 

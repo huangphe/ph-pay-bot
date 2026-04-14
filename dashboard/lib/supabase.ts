@@ -139,3 +139,12 @@ export async function updateExpense(
   return data?.[0];
 }
 
+export async function deleteExpense(id: number) {
+  const { error } = await supabase
+    .from("expenses")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+  return true;
+}
+
