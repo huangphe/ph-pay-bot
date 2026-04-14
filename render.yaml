@@ -1,6 +1,7 @@
 services:
   - type: web
     name: ph-pay-bot
+    rootDir: bot
     runtime: docker
     plan: free
     envVars:
