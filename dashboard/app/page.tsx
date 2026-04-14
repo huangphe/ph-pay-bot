@@ -15,7 +15,8 @@ export default async function HomePage() {
   // 兩人各自合計
   const byUser: Record<string, number> = {};
   for (const e of expenses) {
-    byUser[e.user_name] = (byUser[e.user_name] ?? 0) + e.amount_twd;
+    const displayName = getDisplayName(e);
+    byUser[displayName] = (byUser[displayName] ?? 0) + e.amount_twd;
   }
 
   const catEntries = Object.entries(byCategory).sort(([, a], [, b]) => b - a);
@@ -35,11 +36,9 @@ export default async function HomePage() {
           <p className="stat-value">{fmtMoney(total)}</p>
           <p className="text-xs text-zinc-600 mt-1">{expenses.length} 筆記錄</p>
         </div>
-        {Object.entries(byUser).map(([name, amt]) => {
-          // 為了摘要卡片，我們模擬一個 expense 對象
-          const displayName = getDisplayName({ user_id: "", user_name: name });
+        {Object.entries(byUser).map(([displayName, amt]) => {
           return (
-            <div key={name} className="glass-card p-5">
+            <div key={displayName} className="glass-card p-5">
               <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 truncate">
                 {displayName}
               </p>

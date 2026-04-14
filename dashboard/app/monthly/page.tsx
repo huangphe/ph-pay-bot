@@ -41,7 +41,8 @@ export default async function MonthlyPage({ searchParams }: Props) {
 
   const byUser: Record<string, number> = {};
   for (const e of expenses) {
-    byUser[e.user_name] = (byUser[e.user_name] ?? 0) + e.amount_twd;
+    const displayName = getDisplayName(e);
+    byUser[displayName] = (byUser[displayName] ?? 0) + e.amount_twd;
   }
 
   const prevMonth = month === 1 ? 12 : month - 1;
@@ -91,10 +92,9 @@ export default async function MonthlyPage({ searchParams }: Props) {
           <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2">日均支出</p>
           <p className="stat-value text-2xl">{fmtMoney(total / daysInMonth)}</p>
         </div>
-        {Object.entries(byUser).map(([name, amt]) => {
-          const displayName = getDisplayName({ user_id: "", user_name: name });
+        {Object.entries(byUser).map(([displayName, amt]) => {
           return (
-            <div key={name} className="glass-card p-5">
+            <div key={displayName} className="glass-card p-5">
               <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2 truncate">
                 {displayName}
               </p>
