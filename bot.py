@@ -35,6 +35,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── 紀錄者名稱對照表 ──────────────────────────────────────
+# 請將 Telegram ID 對照到您想要的名稱
+USER_NAME_MAP = {
+    5725029188: "@HAO",
+    # 請將另一個人的 ID 填入下方，目前先用偵測邏輯
+}
+
 # ── 工具函數 ───────────────────────────────────────────────
 
 def is_allowed(user_id: int) -> bool:
@@ -66,21 +73,45 @@ def build_category_keyboard(selected: str | None = None) -> InlineKeyboardMarkup
 async def parse_quick_add(text: str) -> dict | None:
     text = text.strip()
     if not text: return None
+    
+    # 1. 日期過濾：若字串開頭是 10/17 或 4-12，先將其移除以避免誤判為金額
+    # 優化：支援 10 / 17 (空格) 格式
+    text = re.sub(r"^\d{1,2}\s*[/\-]\s*\d{1,2}\s*", "", text).strip()
+    
+    # 2. 解析金額與內容
     match_start = re.match(r"^(\d+(?:\.\d{1,2})?)\s*(.*)$", text)
     match_end   = re.match(r"^(.*?)\s*(\d+(?:\.\d{1,2})?)$", text)
-    if match_start:
-        amount_raw = float(match_start.group(1)); rest = match_start.group(2).strip()
-    elif match_end:
-        amount_raw = float(match_end.group(2)); rest = match_end.group(1).strip()
-    else: return None
+    
+    if match_end:
+        # 優先權：若結尾有數字，通常是金額 (如 「茶葉蛋 17」)
+        amount_raw = float(match_end.group(2))
+        rest = match_end.group(1).strip()
+    elif match_start:
+        # 若開頭有數字，則視為金額 (如 「17 茶葉蛋」)
+        amount_raw = float(match_start.group(1))
+        rest = match_start.group(2).strip()
+    else:
+        return None
+        
     tokens = rest.split(); currency_code = "TWD"; explicit_category = None; note = rest
+    
+    # 檢查幣別
     if tokens:
         detected = fx.parse_currency(tokens[0])
         if detected:
             currency_code = detected; rest = " ".join(tokens[1:]); tokens = rest.split()
-    if tokens and classifier.is_valid_category(tokens[0]):
-        explicit_category = tokens[0]; note = " ".join(tokens[1:])
-    else: note = rest
+            
+    # 檢查明確分類：支援「食 晚餐」(空格) 或 「食晚餐」(無空格)
+    if rest:
+        if tokens and classifier.is_valid_category(tokens[0]):
+            explicit_category = tokens[0]
+            note = " ".join(tokens[1:])
+        elif classifier.is_valid_category(rest[0]):
+            explicit_category = rest[0]
+            note = rest[1:].strip()
+        else:
+            note = rest
+
     rate = await fx.get_twd_rate(currency_code)
     return {
         "amount_original": amount_raw, "currency": currency_code, "exchange_rate": rate,
@@ -120,7 +151,9 @@ async def cmd_today(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not expenses: await update.message.reply_text("📊 今日尚無記帳紀錄。"); return
     total = sum(e["amount_twd"] for e in expenses)
     lines = [f"💰 *今日總計：{fmt_money(total)}*"]
-    for e in expenses: lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])}")
+    for e in expenses:
+        name = e.get("user_name", "User").replace("@", "")
+        lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 async def cmd_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -138,10 +171,23 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
     for s in [seg.strip() for seg in segments if seg.strip()]:
         p = await parse_quick_add(s)
         if p:
-            record = db.add_expense(user.id, user.username or str(user.id), p["amount_twd"], p["amount_original"], p["currency"], p["exchange_rate"], p["category"], p["note"])
+            # 優先使用對照表
+            mapped_name = USER_NAME_MAP.get(user.id)
+            if mapped_name:
+                recorder_name = mapped_name
+            elif "wu" in (user.full_name or "").lower() or "wu" in (user.username or "").lower():
+                recorder_name = "@WU"
+            else:
+                raw_name = user.full_name or user.username or user.first_name or str(user.id)
+                recorder_name = f"@{raw_name}" if not raw_name.startswith("@") else raw_name
+                
+            record = db.add_expense(user.id, recorder_name, p["amount_twd"], p["amount_original"], p["currency"], p["exchange_rate"], p["category"], p["note"])
             results.append((p, record.get("id")))
     if results:
-        msg = f"✅ 成功記錄 {len(results)} 筆！\n" + "\n".join([f"{classifier.get_icon(p[0]['category'])} {p[0]['note']}: {fmt_money(p[0]['amount_twd'])}" for p in results])
+        msg = f"✅ 成功記錄 {len(results)} 筆！\n" + "\n".join([
+            f"{classifier.get_icon(p[0]['category'])} {p[0]['note']}: {fmt_money(p[0]['amount_twd'])} ({p[1] if isinstance(p[1], str) else recorder_name})" 
+            for p in results
+        ])
         await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -157,7 +203,7 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         result = await ai.analyze_receipt(img_bytes)
         if result and result["success"]:
             auto_cat = classifier.classify(result["note"])
-            db.add_expense(update.effective_user.id, update.effective_user.username or "User", result["amount"], result["amount"], "TWD", 1.0, auto_cat, result["note"])
+            db.add_expense(update.effective_user.id, update.effective_user.full_name or "User", result["amount"], result["amount"], "TWD", 1.0, auto_cat, result["note"])
             await status_msg.edit_text(f"📸 *辨識成功！*\n{classifier.get_icon(auto_cat)} {result['note']}\n💰 {fmt_money(result['amount'])}", parse_mode="Markdown")
         else: await status_msg.edit_text("❌ 辨識失敗，請手動輸入。")
     except Exception as e:
