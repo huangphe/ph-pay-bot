@@ -17,9 +17,11 @@ import BalanceSheetSummary from "@/components/wealth/dashboard/BalanceSheetSumma
 import MiniNetWorthChart from "@/components/wealth/dashboard/MiniNetWorthChart";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function DashboardPage() {
   const errors: string[] = [];
+  const buildTime = new Date().toISOString();
 
   const [assets, liabilities, incomeSources, snapshots, avgExpenses] =
     await Promise.all([
@@ -39,6 +41,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div className="bg-blue-900/50 text-blue-100 p-2 rounded text-xs border border-blue-500/50 font-mono">
+        v1.2.1-LIVE | Build: {buildTime} | Assets: {assets.length} | Liab: {liabilities.length} | Errors: {errors.length}
+      </div>
+
       {errors.length > 0 && (
         <div className="bg-red-900/50 text-red-100 p-4 rounded-xl border border-red-500/50 shadow-lg text-sm mb-6 max-h-48 overflow-auto">
           <h3 className="font-bold mb-2">🔥 Server Data Fetching Failed:</h3>
