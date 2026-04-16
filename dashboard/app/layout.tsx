@@ -31,6 +31,8 @@ const WEALTH_NAV = [
   { href: "/wealth/projection", icon: LineChart, label: "淨資產預測" },
 ];
 
+import { APP_VERSION } from "@/lib/supabase";
+
 export default function RootLayout({
   children,
 }: {
@@ -100,10 +102,11 @@ export default function RootLayout({
             </div>
 
             {/* Footer */}
-            <div className="px-3 pt-4 border-t border-white/5">
-              <p className="text-[11px] text-zinc-700 font-medium">
-                Supabase Cloud Syncing
-              </p>
+            <div className="px-3 pt-4 border-t border-white/5 space-y-1">
+              <div className="flex items-center justify-between text-[9px] text-zinc-700 font-medium uppercase tracking-tighter">
+                <span>{APP_VERSION}</span>
+                <span>Cloud Syncing</span>
+              </div>
             </div>
           </aside>
 

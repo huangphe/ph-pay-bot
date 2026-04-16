@@ -1,7 +1,7 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Trash2, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface Props {
   onDelete: () => Promise<void>;
@@ -9,26 +9,56 @@ interface Props {
 }
 
 export default function DeleteButton({ onDelete, label = "刪除" }: Props) {
-  const [loading, setLoading] = useState(false);
+  const [stage, setStage] = useState<"idle" | "confirm" | "loading">("idle");
 
-  async function handleClick() {
-    if (!window.confirm("確定要刪除嗎？")) return;
-    setLoading(true);
-    try {
-      await onDelete();
-    } finally {
-      setLoading(false);
+  // Auto-reset after 3 seconds if not confirmed
+  useEffect(() => {
+    if (stage === "confirm") {
+      const timer = setTimeout(() => setStage("idle"), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [stage]);
+
+  async function handleClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (stage === "idle") {
+      setStage("confirm");
+      return;
+    }
+
+    if (stage === "confirm") {
+      setStage("loading");
+      try {
+        await onDelete();
+      } catch (err) {
+        setStage("idle");
+      }
     }
   }
 
   return (
     <button
       onClick={handleClick}
-      disabled={loading}
-      className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors"
+      disabled={stage === "loading"}
+      className={`flex items-center gap-1 text-xs transition-all px-2 py-1 rounded-lg ${
+        stage === "confirm" 
+          ? "bg-red-500/20 text-red-200 border border-red-500/50" 
+          : "text-red-400 hover:bg-red-500/10"
+      } ${stage === "loading" ? "opacity-50" : "opacity-100"}`}
     >
-      <Trash2 size={13} />
-      {label}
+      {stage === "confirm" ? (
+        <>
+          <AlertCircle size={13} />
+          <span>確認？</span>
+        </>
+      ) : (
+        <>
+          <Trash2 size={13} />
+          <span>{label}</span>
+        </>
+      )}
     </button>
   );
 }

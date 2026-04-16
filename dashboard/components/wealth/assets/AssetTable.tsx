@@ -26,17 +26,17 @@ export default function AssetTable({ assets, onRefresh }: Props) {
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto pb-4 custom-scrollbar">
+        <table className="w-full text-sm min-w-[800px]">
           <thead>
-            <tr className="text-xs text-zinc-500 border-b border-white/5">
-              <th className="text-left pb-3 font-medium">名稱</th>
-              <th className="text-left pb-3 font-medium">類型</th>
-              <th className="text-left pb-3 font-medium">負責人</th>
-              <th className="text-right pb-3 font-medium">成本</th>
-              <th className="text-right pb-3 font-medium">現值</th>
-              <th className="text-right pb-3 font-medium">未實現損益</th>
-              <th className="pb-3" />
+            <tr className="text-xs text-zinc-500 border-b border-white/5 uppercase tracking-wider">
+              <th className="text-left pb-4 font-medium px-4">名稱</th>
+              <th className="text-left pb-4 font-medium px-4">類型</th>
+              <th className="text-left pb-4 font-medium px-4">負責人</th>
+              <th className="text-right pb-4 font-medium px-4">成本</th>
+              <th className="text-right pb-4 font-medium px-4">現值</th>
+              <th className="text-right pb-4 font-medium px-4">未實現損益</th>
+              <th className="pb-4" />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">

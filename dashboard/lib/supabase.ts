@@ -237,18 +237,25 @@ export function totalMonthlyLiabilities(liabilities: Liability[]): number {
  * 計算負債項目的剩餘總額
  * 如果 total_remaining 存在則直接使用，否則根據每月還款與到期日進行估算
  */
+export const APP_VERSION = "v1.1.0-fix-calc";
+
 export function getLiabilityBalance(l: Liability): number {
-  const remaining = l.total_remaining;
-  if (remaining !== null && remaining !== undefined && String(remaining) !== "0" && String(remaining) !== "" && String(remaining) !== "null") {
-    return Number(remaining);
-  }
-  
-  const payment = Number(l.monthly_payment || 0);
-  if (l.due_date && payment > 0) {
-    const months = diffInMonths(new Date(), l.due_date);
-    const est = Math.max(0, months * payment);
-    console.log(`[Debug] Liability: ${l.name}, Months: ${months}, Payment: ${payment}, Est: ${est}`);
-    return est;
+  try {
+    const remaining = l.total_remaining;
+    if (remaining !== null && remaining !== undefined && String(remaining).trim() !== "" && Number(remaining) > 0) {
+      return Number(remaining);
+    }
+    
+    const payment = Number(l.monthly_payment || 0);
+    if (l.due_date && payment > 0) {
+      const months = diffInMonths(new Date(), l.due_date);
+      // 如果月份 <= 0 說明已過期，回傳 0
+      const est = Math.max(0, months * payment);
+      console.log(`[Calc] ${l.name}: payment=${payment}, months=${months}, est=${est}`);
+      return est;
+    }
+  } catch (err) {
+    console.error("getLiabilityBalance error:", err);
   }
   return 0;
 }

@@ -26,18 +26,18 @@ export default function LiabilityTable({ liabilities, onRefresh }: Props) {
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto pb-4 custom-scrollbar">
+        <table className="w-full text-sm min-w-[800px]">
           <thead>
-            <tr className="text-xs text-zinc-500 border-b border-white/5">
-              <th className="text-left pb-3 font-medium">名稱</th>
-              <th className="text-left pb-3 font-medium">類型</th>
-              <th className="text-left pb-3 font-medium">負責人</th>
-              <th className="text-right pb-3 font-medium">每月</th>
-              <th className="text-right pb-3 font-medium">剩餘總額</th>
-              <th className="text-right pb-3 font-medium">利率</th>
-              <th className="text-right pb-3 font-medium">到期日</th>
-              <th className="pb-3" />
+            <tr className="text-xs text-zinc-500 border-b border-white/5 uppercase tracking-wider">
+              <th className="text-left pb-4 font-medium px-4">名稱</th>
+              <th className="text-left pb-4 font-medium px-4">類型</th>
+              <th className="text-left pb-4 font-medium px-4">負責人</th>
+              <th className="text-right pb-4 font-medium px-4">每月</th>
+              <th className="text-right pb-4 font-medium px-4">剩餘總額</th>
+              <th className="text-right pb-4 font-medium px-4">利率</th>
+              <th className="text-right pb-4 font-medium px-4">到期日</th>
+              <th className="pb-4" />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
