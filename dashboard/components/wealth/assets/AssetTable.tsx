@@ -26,8 +26,8 @@ export default function AssetTable({ assets, onRefresh }: Props) {
 
   return (
     <>
-      <div className="overflow-x-auto pb-4 custom-scrollbar">
-        <table className="w-full text-sm min-w-[800px]">
+      <div className="wealth-table-container custom-scrollbar pb-4">
+        <table className="wealth-table w-full text-sm">
           <thead>
             <tr className="text-xs text-zinc-500 border-b border-white/5 uppercase tracking-wider">
               <th className="text-left pb-4 font-medium px-4">名稱</th>

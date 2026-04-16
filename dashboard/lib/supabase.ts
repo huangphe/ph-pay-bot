@@ -237,7 +237,7 @@ export function totalMonthlyLiabilities(liabilities: Liability[]): number {
  * 計算負債項目的剩餘總額
  * 如果 total_remaining 存在則直接使用，否則根據每月還款與到期日進行估算
  */
-export const APP_VERSION = "v1.1.0-fix-calc";
+export const APP_VERSION = "v1.2.0-final-forced";
 
 export function getLiabilityBalance(l: Liability): number {
   try {

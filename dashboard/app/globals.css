@@ -57,6 +57,22 @@ body::before {
 .gain-positive { color: #34d399; }
 .gain-negative { color: #f87171; }
 
+/* Dashboard Tables Fix */
+.wealth-table-container {
+  overflow-x: auto;
+  min-width: 100%;
+}
+
+.wealth-table {
+  min-width: 800px !important;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.wealth-table th, .wealth-table td {
+  white-space: nowrap !important;
+}
+
 @layer base {
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
