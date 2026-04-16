@@ -25,7 +25,7 @@ export default async function DashboardPage() {
       fetchActiveLiabilities().catch((e) => { console.error("FetchLiabilities Error:", e); return []; }),
       fetchActiveIncomeSources().catch((e) => { console.error("FetchIncome Error:", e); return []; }),
       fetchNetWorthSnapshots(12).catch((e) => { console.error("FetchSnapshots Error:", e); return []; }),
-      fetchAvgMonthlyExpenses(3).catch((e) => { console.error("FetchExpenses Error:", e); return []; }),
+      fetchAvgMonthlyExpenses(3).catch((e) => { console.error("FetchExpenses Error:", e); return 0; }),
     ]);
 
   console.log(`[Server Debug] Assets: ${assets.length}, Liabilities: ${liabilities.length}, Income: ${incomeSources.length}`);
