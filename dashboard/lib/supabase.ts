@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { pastMonthsStart, currentMonthStart, diffInMonths } from "./utils";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY!;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy.supabase.co";
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || "dummy";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
