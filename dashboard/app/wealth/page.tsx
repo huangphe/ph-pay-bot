@@ -19,16 +19,16 @@ import MiniNetWorthChart from "@/components/wealth/dashboard/MiniNetWorthChart";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const errors: string[] = [];
+
   const [assets, liabilities, incomeSources, snapshots, avgExpenses] =
     await Promise.all([
-      fetchAssets().catch((e) => { console.error("FetchAssets Error:", e); return []; }),
-      fetchActiveLiabilities().catch((e) => { console.error("FetchLiabilities Error:", e); return []; }),
-      fetchActiveIncomeSources().catch((e) => { console.error("FetchIncome Error:", e); return []; }),
-      fetchNetWorthSnapshots(12).catch((e) => { console.error("FetchSnapshots Error:", e); return []; }),
-      fetchAvgMonthlyExpenses(3).catch((e) => { console.error("FetchExpenses Error:", e); return 0; }),
+      fetchAssets().catch((e) => { errors.push(`[fetchAssets]: ${e.message || String(e)}`); return []; }),
+      fetchActiveLiabilities().catch((e) => { errors.push(`[fetchLiabilities]: ${e.message || String(e)}`); return []; }),
+      fetchActiveIncomeSources().catch((e) => { errors.push(`[fetchIncome]: ${e.message || String(e)}`); return []; }),
+      fetchNetWorthSnapshots(12).catch((e) => { errors.push(`[fetchSnapshots]: ${e.message || String(e)}`); return []; }),
+      fetchAvgMonthlyExpenses(3).catch((e) => { errors.push(`[fetchAvgExpenses]: ${e.message || String(e)}`); return 0; }),
     ]);
-
-  console.log(`[Server Debug] Assets: ${assets.length}, Liabilities: ${liabilities.length}, Income: ${incomeSources.length}`);
 
   const totalAssets = totalAssetValue(assets);
   const totalLiab = totalLiabilitiesRemaining(liabilities);
@@ -39,6 +39,17 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {errors.length > 0 && (
+        <div className="bg-red-900/50 text-red-100 p-4 rounded-xl border border-red-500/50 shadow-lg text-sm mb-6 max-h-48 overflow-auto">
+          <h3 className="font-bold mb-2">🔥 Server Data Fetching Failed:</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            {errors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-zinc-100">總覽</h1>
         <p className="text-sm text-zinc-500 mt-1">資產負債表 · 今日快照</p>
