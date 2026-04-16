@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import {
   IncomeSource,
-  fetchAllIncomeSources,
+  fetchActiveIncomeSources as fetchAllIncomeSources,
   totalMonthlyIncome,
   normalizeToMonthly,
 } from "@/lib/supabase";
