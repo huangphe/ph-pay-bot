@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -15,7 +13,6 @@
 
 body {
   background: var(--background);
-  font-family: "Inter", sans-serif;
   color: #e4e4e7;
   min-height: 100vh;
 }
@@ -47,4 +44,23 @@ body::before {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Sidebar */
+.sidebar {
+  background: rgba(8,8,15,0.85);
+  border-right: 1px solid rgba(255,255,255,0.05);
+  backdrop-filter: blur(16px);
+}
+
+/* Gain / loss colors */
+.gain-positive { color: #34d399; }
+.gain-negative { color: #f87171; }
+
+@layer base {
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }

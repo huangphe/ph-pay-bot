@@ -1,12 +1,29 @@
 import { createClient } from "@supabase/supabase-js";
+import { pastMonthsStart, currentMonthStart } from "./utils";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY!;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ── 型別定義 ──────────────────────────────────────────────
+// Supabase returns PostgrestError (plain object), not Error instances.
+// This helper ensures catch blocks always get a real Error with a readable message.
+function toError(e: unknown): Error {
+  if (e instanceof Error) return e;
+  const pg = e as { message?: string; code?: string; details?: string };
+  const msg = pg?.message ?? JSON.stringify(e);
+  // Surface a hint for the most common setup issue
+  if (pg?.code === "PGRST205") {
+    return new Error(`資料表不存在 (${msg})。請先在 Supabase SQL Editor 執行 database/schema.sql`);
+  }
+  return new Error(msg);
+}
 
+// ══════════════════════════════════════════════════════════
+// TypeScript Interfaces
+// ══════════════════════════════════════════════════════════
+
+// --- Couple Finance (Expenses) ---
 export interface Expense {
   id: number;
   user_id: string;
@@ -28,8 +45,99 @@ export interface Category {
   is_default: boolean;
 }
 
-// ── 類別圖示與顏色 ────────────────────────────────────────
+// --- Wealth Manager ---
+export type IncomeFrequency = "monthly" | "annual" | "quarterly";
+export type IncomeCategory = "salary" | "bonus" | "rental" | "side" | "other";
+export type Owner = "HAO" | "WU" | "shared";
+export type AssetType =
+  | "stock"
+  | "etf"
+  | "crypto"
+  | "real_estate"
+  | "cash"
+  | "other";
+export type LiabilityType =
+  | "mortgage"
+  | "car_loan"
+  | "insurance"
+  | "rent"
+  | "subscription"
+  | "other";
 
+export interface IncomeSource {
+  id: number;
+  name: string;
+  amount: number;
+  frequency: IncomeFrequency;
+  category: IncomeCategory;
+  owner: Owner;
+  is_active: boolean;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Asset {
+  id: number;
+  name: string;
+  asset_type: AssetType;
+  current_value: number;
+  purchase_cost: number;
+  quantity: number | null;
+  currency: string;
+  exchange_rate: number;
+  ticker: string | null;
+  owner: Owner;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Liability {
+  id: number;
+  name: string;
+  liability_type: LiabilityType;
+  monthly_payment: number;
+  total_remaining: number | null;
+  interest_rate: number | null;
+  due_date: string | null;
+  owner: Owner;
+  is_active: boolean;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NetWorthSnapshot {
+  id: number;
+  snapshot_date: string;
+  total_assets: number;
+  total_liabilities: number;
+  net_worth: number;
+  monthly_income: number | null;
+  monthly_expenses: number | null;
+  monthly_savings: number | null;
+  created_at: string;
+}
+
+export interface RetirementGoal {
+  id: number;
+  label: string;
+  current_age: number;
+  retirement_age: number;
+  target_amount: number;
+  expected_return_rate: number;
+  inflation_rate: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ══════════════════════════════════════════════════════════
+// Display metadata & Mapping
+// ══════════════════════════════════════════════════════════
+
+// --- Expenses Metadata ---
 export const CAT_META: Record<string, { icon: string; color: string }> = {
   食: { icon: "🍜", color: "#F97316" },
   衣: { icon: "👗", color: "#EC4899" },
@@ -44,8 +152,6 @@ export function getCatMeta(cat: string) {
   return CAT_META[cat] ?? { icon: "💰", color: "#6B7280" };
 }
 
-// ── 名稱映射 ─────────────────────────────────────────────
-
 export const USER_MAP: Record<string, string> = {
   "5725029188": "@HAO",
   "8514343851": "@WU",
@@ -54,16 +160,90 @@ export const USER_MAP: Record<string, string> = {
 export function getDisplayName(expense: { user_id: string | number; user_name: string }) {
   const mapped = USER_MAP[String(expense.user_id)];
   if (mapped) return mapped;
-  
-  // 模糊比對
   const lowerName = expense.user_name.toLowerCase();
   if (lowerName.includes("hao")) return "@HAO";
   if (lowerName.includes("wu")) return "@WU";
-  
   return expense.user_name.startsWith("@") ? expense.user_name : `@${expense.user_name}`;
 }
 
-// ── 查詢函數 ─────────────────────────────────────────────
+// --- Wealth Metadata ---
+export const ASSET_TYPE_META: Record<AssetType, { label: string; icon: string; color: string }> = {
+  stock: { label: "股票", icon: "📈", color: "#6366f1" },
+  etf: { label: "ETF", icon: "🗂️", color: "#8b5cf6" },
+  crypto: { label: "加密貨幣", icon: "₿", color: "#f59e0b" },
+  real_estate: { label: "不動產", icon: "🏠", color: "#10b981" },
+  cash: { label: "現金/存款", icon: "💵", color: "#3b82f6" },
+  other: { label: "其他", icon: "💼", color: "#6b7280" },
+};
+
+export const LIABILITY_TYPE_META: Record<LiabilityType, { label: string; icon: string }> = {
+  mortgage: { label: "房貸", icon: "🏦" },
+  car_loan: { label: "車貸", icon: "🚗" },
+  insurance: { label: "保險", icon: "🛡️" },
+  rent: { label: "租金", icon: "🔑" },
+  subscription: { label: "訂閱", icon: "📱" },
+  other: { label: "其他", icon: "📋" },
+};
+
+export const INCOME_CATEGORY_META: Record<IncomeCategory, { label: string; icon: string }> = {
+  salary: { label: "薪資", icon: "💼" },
+  bonus: { label: "獎金", icon: "🎁" },
+  rental: { label: "租金收入", icon: "🏠" },
+  side: { label: "副業", icon: "⚡" },
+  other: { label: "其他", icon: "💰" },
+};
+
+export const OWNER_LABELS: Record<Owner, string> = {
+  HAO: "HAO",
+  WU: "WU",
+  shared: "共同",
+};
+
+// ══════════════════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════════════════
+
+export function normalizeToMonthly(source: IncomeSource): number {
+  if (source.frequency === "annual") return source.amount / 12;
+  if (source.frequency === "quarterly") return source.amount / 4;
+  return source.amount;
+}
+
+export function totalMonthlyIncome(sources: IncomeSource[]): number {
+  return sources.reduce((sum, s) => sum + normalizeToMonthly(s), 0);
+}
+
+export function totalAssetValue(assets: Asset[]): number {
+  return assets.reduce((sum, a) => sum + a.current_value, 0);
+}
+
+export function totalPurchaseCost(assets: Asset[]): number {
+  return assets.reduce((sum, a) => sum + a.purchase_cost, 0);
+}
+
+export function groupAssetsByType(assets: Asset[]): Record<AssetType, number> {
+  const result = {} as Record<AssetType, number>;
+  for (const a of assets) {
+    result[a.asset_type] = (result[a.asset_type] ?? 0) + a.current_value;
+  }
+  return result;
+}
+
+export function totalMonthlyLiabilities(liabilities: Liability[]): number {
+  return liabilities.reduce((sum, l) => sum + l.monthly_payment, 0);
+}
+
+export function totalLiabilitiesRemaining(liabilities: Liability[]): number {
+  return liabilities.reduce((sum, l) => sum + (l.total_remaining ?? 0), 0);
+}
+
+export function fmtMoney(n: number): string {
+  return `NT$${n.toLocaleString("zh-TW", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// Query: Expenses (Couple Finance)
+// ══════════════════════════════════════════════════════════
 
 export async function fetchTodayExpenses(): Promise<Expense[]> {
   const today = new Date().toISOString().split("T")[0];
@@ -72,79 +252,171 @@ export async function fetchTodayExpenses(): Promise<Expense[]> {
     .select("*")
     .gte("created_at", `${today}T00:00:00+00:00`)
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  if (error) throw toError(error);
   return data ?? [];
-}
-
-export async function fetchMonthExpenses(
-  year: number,
-  month: number
-): Promise<Expense[]> {
-  const start = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+00:00`;
-  const endMonth = month === 12 ? 1 : month + 1;
-  const endYear = month === 12 ? year + 1 : year;
-  const end = `${endYear}-${String(endMonth).padStart(2, "0")}-01T00:00:00+00:00`;
-
-  const { data, error } = await supabase
-    .from("expenses")
-    .select("*")
-    .gte("created_at", start)
-    .lt("created_at", end)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
-}
-
-// ── 計算函數 ─────────────────────────────────────────────
-
-export function groupByCategory(expenses: Expense[]): Record<string, number> {
-  return expenses.reduce(
-    (acc, e) => {
-      acc[e.category] = (acc[e.category] ?? 0) + e.amount_twd;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-}
-
-export function groupByDay(expenses: Expense[]): { date: string; total: number }[] {
-  const map: Record<string, number> = {};
-  for (const e of expenses) {
-    const day = e.created_at.split("T")[0];
-    map[day] = (map[day] ?? 0) + e.amount_twd;
-  }
-  return Object.entries(map)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, total]) => ({ date, total }));
 }
 
 export function totalAmount(expenses: Expense[]): number {
   return expenses.reduce((sum, e) => sum + e.amount_twd, 0);
 }
 
-export function fmtMoney(n: number): string {
-  return `NT$${n.toLocaleString("zh-TW", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+export function groupByCategory(expenses: Expense[]): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const e of expenses) {
+    result[e.category] = (result[e.category] ?? 0) + e.amount_twd;
+  }
+  return result;
 }
 
-export async function updateExpense(
-  id: number,
-  updates: Partial<Pick<Expense, "amount_twd" | "category" | "note">>
-) {
+export function groupByDay(expenses: Expense[]): Array<{ date: string; total: number }> {
+  const grouped: Record<string, number> = {};
+  for (const e of expenses) {
+    const d = e.created_at.split("T")[0];
+    grouped[d] = (grouped[d] ?? 0) + e.amount_twd;
+  }
+  return Object.entries(grouped).map(([date, total]) => ({ date, total }));
+}
+
+export async function fetchMonthExpenses(year: number, month: number): Promise<Expense[]> {
+  const start = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+00:00`;
+  const endMonth = month === 12 ? 1 : month + 1;
+  const endYear = month === 12 ? year + 1 : year;
+  const end = `${endYear}-${String(endMonth).padStart(2, "0")}-01T00:00:00+00:00`;
   const { data, error } = await supabase
     .from("expenses")
-    .update(updates)
-    .eq("id", id)
-    .select();
-  if (error) throw error;
+    .select("*")
+    .gte("created_at", start)
+    .lt("created_at", end)
+    .order("created_at", { ascending: true });
+  if (error) throw toError(error);
+  return data ?? [];
+}
+
+export async function updateExpense(id: number, updates: Partial<Pick<Expense, "amount_twd" | "category" | "note">>) {
+  const { data, error } = await supabase.from("expenses").update(updates).eq("id", id).select();
+  if (error) throw toError(error);
   return data?.[0];
 }
 
 export async function deleteExpense(id: number) {
-  const { error } = await supabase
-    .from("expenses")
-    .delete()
-    .eq("id", id);
-  if (error) throw error;
+  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  if (error) throw toError(error);
   return true;
 }
 
+// ══════════════════════════════════════════════════════════
+// Query: Wealth Manager
+// ══════════════════════════════════════════════════════════
+
+export async function fetchActiveIncomeSources(): Promise<IncomeSource[]> {
+  const { data, error } = await supabase
+    .from("income_sources")
+    .select("*")
+    .eq("is_active", true)
+    .order("category")
+    .order("name");
+  if (error) throw toError(error);
+  return data ?? [];
+}
+
+export async function insertIncomeSource(payload: Omit<IncomeSource, "id" | "created_at" | "updated_at">): Promise<IncomeSource> {
+  const { data, error } = await supabase.from("income_sources").insert(payload).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function updateIncomeSource(id: number, payload: Partial<Omit<IncomeSource, "id" | "created_at" | "updated_at">>): Promise<IncomeSource> {
+  const { data, error } = await supabase.from("income_sources").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function deleteIncomeSource(id: number): Promise<void> {
+  const { error } = await supabase.from("income_sources").update({ is_active: false, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw toError(error);
+}
+
+export async function fetchAssets(): Promise<Asset[]> {
+  const { data, error } = await supabase.from("assets").select("*").order("asset_type").order("current_value", { ascending: false });
+  if (error) throw toError(error);
+  return data ?? [];
+}
+
+export async function insertAsset(payload: Omit<Asset, "id" | "created_at" | "updated_at">): Promise<Asset> {
+  const { data, error } = await supabase.from("assets").insert(payload).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function updateAsset(id: number, payload: Partial<Omit<Asset, "id" | "created_at" | "updated_at">>): Promise<Asset> {
+  const { data, error } = await supabase.from("assets").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function deleteAsset(id: number): Promise<void> {
+  const { error } = await supabase.from("assets").delete().eq("id", id);
+  if (error) throw toError(error);
+}
+
+export async function fetchActiveLiabilities(): Promise<Liability[]> {
+  const { data, error } = await supabase.from("liabilities").select("*").eq("is_active", true).order("liability_type").order("monthly_payment", { ascending: false });
+  if (error) throw toError(error);
+  return data ?? [];
+}
+
+export async function insertLiability(payload: Omit<Liability, "id" | "created_at" | "updated_at">): Promise<Liability> {
+  const { data, error } = await supabase.from("liabilities").insert(payload).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function updateLiability(id: number, payload: Partial<Omit<Liability, "id" | "created_at" | "updated_at">>): Promise<Liability> {
+  const { data, error } = await supabase.from("liabilities").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function deleteLiability(id: number): Promise<void> {
+  const { error } = await supabase.from("liabilities").update({ is_active: false, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw toError(error);
+}
+
+export async function fetchNetWorthSnapshots(months = 24): Promise<NetWorthSnapshot[]> {
+  const { data, error } = await supabase.from("net_worth_snapshots").select("*").order("snapshot_date", { ascending: true }).limit(months);
+  if (error) throw toError(error);
+  return data ?? [];
+}
+
+export async function upsertNetWorthSnapshot(payload: Omit<NetWorthSnapshot, "id" | "created_at">): Promise<NetWorthSnapshot> {
+  const { data, error } = await supabase.from("net_worth_snapshots").upsert(payload, { onConflict: "snapshot_date" }).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function fetchActiveRetirementGoal(): Promise<RetirementGoal | null> {
+  const { data, error } = await supabase.from("retirement_goals").select("*").eq("is_active", true).limit(1).maybeSingle();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function upsertRetirementGoal(payload: Omit<RetirementGoal, "id" | "created_at" | "updated_at"> & { id?: number }): Promise<RetirementGoal> {
+  if (payload.id) {
+    const { data, error } = await supabase.from("retirement_goals").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", payload.id).select().single();
+    if (error) throw toError(error);
+    return data;
+  }
+  const { data, error } = await supabase.from("retirement_goals").insert(payload).select().single();
+  if (error) throw toError(error);
+  return data;
+}
+
+export async function fetchAvgMonthlyExpenses(lookbackMonths = 3): Promise<number> {
+  const start = pastMonthsStart(lookbackMonths);
+  const end = currentMonthStart();
+  const { data, error } = await supabase.from("expenses").select("amount_twd").gte("created_at", `${start}T00:00:00+00:00`).lt("created_at", `${end}T00:00:00+00:00`);
+  if (error) throw toError(error);
+  if (!data || data.length === 0) return 0;
+  const total = data.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
+  return total / lookbackMonths;
+}
