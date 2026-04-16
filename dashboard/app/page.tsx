@@ -4,7 +4,7 @@ import { zhTW } from "date-fns/locale";
 import TodayPieChart from "@/components/TodayPieChart";
 import ExpenseTable from "@/components/ExpenseTable";
 
-export const revalidate = 60; // ISR: 每60秒重新抓取
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const expenses = await fetchTodayExpenses();

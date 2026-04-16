@@ -8,7 +8,7 @@ import MonthlyBarChart from "@/components/MonthlyBarChart";
 import MonthlyPieChart from "@/components/MonthlyPieChart";
 import ExpenseTable from "@/components/ExpenseTable";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 interface Props {
   searchParams: { year?: string; month?: string };
