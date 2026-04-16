@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pencil } from "lucide-react";
-import { Liability, LIABILITY_TYPE_META, OWNER_LABELS, deleteLiability } from "@/lib/supabase";
+import { Liability, LIABILITY_TYPE_META, OWNER_LABELS, deleteLiability, getLiabilityBalance } from "@/lib/supabase";
 import { fmtMoney, fmtDate } from "@/lib/utils";
 import LiabilityForm from "./LiabilityForm";
 import DeleteButton from "@/components/wealth/ui/DeleteButton";
@@ -43,6 +43,9 @@ export default function LiabilityTable({ liabilities, onRefresh }: Props) {
           <tbody className="divide-y divide-white/5">
             {liabilities.map((l) => {
               const meta = LIABILITY_TYPE_META[l.liability_type];
+              const balance = getLiabilityBalance(l);
+              const isEstimated = !l.total_remaining && l.due_date;
+
               return (
                 <tr key={l.id} className="hover:bg-white/[0.02] transition-colors">
                   <td className="py-3 text-zinc-200 font-medium">{l.name}</td>
@@ -55,7 +58,12 @@ export default function LiabilityTable({ liabilities, onRefresh }: Props) {
                   <td className="py-3 text-zinc-400">{OWNER_LABELS[l.owner]}</td>
                   <td className="py-3 text-right text-red-400 font-semibold">-{fmtMoney(l.monthly_payment)}</td>
                   <td className="py-3 text-right text-zinc-300">
-                    {l.total_remaining ? fmtMoney(l.total_remaining) : "—"}
+                    {balance > 0 ? (
+                      <span className="flex items-center justify-end gap-1">
+                        {isEstimated && <span className="text-[10px] text-zinc-600">約</span>}
+                        {fmtMoney(balance)}
+                      </span>
+                    ) : "—"}
                   </td>
                   <td className="py-3 text-right text-zinc-400">
                     {l.interest_rate ? `${l.interest_rate}%` : "—"}

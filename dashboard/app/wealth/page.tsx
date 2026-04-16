@@ -21,12 +21,14 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const [assets, liabilities, incomeSources, snapshots, avgExpenses] =
     await Promise.all([
-      fetchAssets().catch(() => []),
-      fetchActiveLiabilities().catch(() => []),
-      fetchActiveIncomeSources().catch(() => []),
-      fetchNetWorthSnapshots(12).catch(() => []),
-      fetchAvgMonthlyExpenses(3).catch(() => 0),
+      fetchAssets().catch((e) => { console.error("FetchAssets Error:", e); return []; }),
+      fetchActiveLiabilities().catch((e) => { console.error("FetchLiabilities Error:", e); return []; }),
+      fetchActiveIncomeSources().catch((e) => { console.error("FetchIncome Error:", e); return []; }),
+      fetchNetWorthSnapshots(12).catch((e) => { console.error("FetchSnapshots Error:", e); return []; }),
+      fetchAvgMonthlyExpenses(3).catch((e) => { console.error("FetchExpenses Error:", e); return []; }),
     ]);
+
+  console.log(`[Server Debug] Assets: ${assets.length}, Liabilities: ${liabilities.length}, Income: ${incomeSources.length}`);
 
   const totalAssets = totalAssetValue(assets);
   const totalLiab = totalLiabilitiesRemaining(liabilities);

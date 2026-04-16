@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { pastMonthsStart, currentMonthStart } from "./utils";
+import { pastMonthsStart, currentMonthStart, diffInMonths } from "./utils";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY!;
@@ -230,11 +230,32 @@ export function groupAssetsByType(assets: Asset[]): Record<AssetType, number> {
 }
 
 export function totalMonthlyLiabilities(liabilities: Liability[]): number {
-  return liabilities.reduce((sum, l) => sum + l.monthly_payment, 0);
+  return liabilities.reduce((sum, l) => sum + (l.is_active ? l.monthly_payment : 0), 0);
+}
+
+/**
+ * 計算負債項目的剩餘總額
+ * 如果 total_remaining 存在則直接使用，否則根據每月還款與到期日進行估算
+ */
+export function getLiabilityBalance(l: Liability): number {
+  const remaining = l.total_remaining;
+  if (remaining !== null && remaining !== undefined && String(remaining) !== "0" && String(remaining) !== "" && String(remaining) !== "null") {
+    return Number(remaining);
+  }
+  
+  const payment = Number(l.monthly_payment || 0);
+  if (l.due_date && payment > 0) {
+    const months = diffInMonths(new Date(), l.due_date);
+    const est = Math.max(0, months * payment);
+    console.log(`[Debug] Liability: ${l.name}, Months: ${months}, Payment: ${payment}, Est: ${est}`);
+    return est;
+  }
+  return 0;
 }
 
 export function totalLiabilitiesRemaining(liabilities: Liability[]): number {
-  return liabilities.reduce((sum, l) => sum + (l.total_remaining ?? 0), 0);
+  if (!liabilities || liabilities.length === 0) return 0;
+  return liabilities.reduce((sum, l) => sum + (l.is_active !== false ? getLiabilityBalance(l) : 0), 0);
 }
 
 export function fmtMoney(n: number): string {

@@ -46,3 +46,25 @@ export function currentMonthStart(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
+
+/**
+ * 計算兩個日期相差的月份數
+ * 常用於估算剩餘還款期數
+ */
+export function diffInMonths(startStr: string | Date, endStr: string | Date): number {
+  try {
+    const start = typeof startStr === "string" ? new Date(startStr) : startStr;
+    const end = typeof endStr === "string" ? new Date(endStr) : endStr;
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+    
+    const yearDiff = end.getFullYear() - start.getFullYear();
+    const monthDiff = end.getMonth() - start.getMonth();
+    const total = yearDiff * 12 + monthDiff;
+    
+    // 如果今天還沒到那個月的日期，可以減少一個月，或者直接用整月計。
+    // 這邊採用簡單估算：只要年份和月份有差就計算。
+    return Math.max(0, total);
+  } catch (e) {
+    return 0;
+  }
+}

@@ -1,4 +1,4 @@
-import { Asset, Liability, ASSET_TYPE_META, LIABILITY_TYPE_META } from "@/lib/supabase";
+import { Asset, Liability, ASSET_TYPE_META, LIABILITY_TYPE_META, getLiabilityBalance } from "@/lib/supabase";
 import { fmtMoney } from "@/lib/utils";
 
 interface Props {
@@ -8,8 +8,7 @@ interface Props {
 
 export default function BalanceSheetSummary({ assets, liabilities }: Props) {
   const totalAssets = assets.reduce((s, a) => s + a.current_value, 0);
-  const totalLiabilities = liabilities.reduce((s, l) => s + l.monthly_payment * 12, 0);
-  const totalLiabilitiesRemaining = liabilities.reduce((s, l) => s + (l.total_remaining ?? l.monthly_payment * 12), 0);
+  const totalLiabilitiesRemaining = liabilities.reduce((s, l) => s + getLiabilityBalance(l), 0);
   const netWorth = totalAssets - totalLiabilitiesRemaining;
 
   // Group assets by type
@@ -29,7 +28,7 @@ export default function BalanceSheetSummary({ assets, liabilities }: Props) {
     if (!liabGroups[l.liability_type]) {
       liabGroups[l.liability_type] = { label: meta.label, icon: meta.icon, total: 0 };
     }
-    liabGroups[l.liability_type].total += l.total_remaining ?? l.monthly_payment * 12;
+    liabGroups[l.liability_type].total += getLiabilityBalance(l);
   }
 
   return (
