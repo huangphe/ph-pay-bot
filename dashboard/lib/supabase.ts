@@ -274,7 +274,11 @@ export function fmtMoney(n: number): string {
 // ══════════════════════════════════════════════════════════
 
 export async function fetchTodayExpenses(): Promise<Expense[]> {
-  const today = new Date().toISOString().split("T")[0];
+  // Use Taiwan time (UTC+8) to determine "today"
+  const now = new Date();
+  const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+  const today = twTime.toISOString().split("T")[0];
+
   const { data, error } = await supabase
     .from("expenses")
     .select("*")
