@@ -4,8 +4,14 @@
 
 import os
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from supabase import create_client, Client
+
+TW = timezone(timedelta(hours=8))
+
+def _today_tw() -> str:
+    """回傳台灣時區今日日期，格式 YYYY-MM-DD"""
+    return datetime.now(TW).date().isoformat()
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +89,13 @@ def add_category(name: str, icon: str = "💰", color: str = "#6B7280") -> dict:
 # ── 查詢 ──────────────────────────────────────────────────
 
 def get_today_summary() -> list[dict]:
-    """取得今日所有支出"""
+    """取得今日所有支出（以台灣時間 UTC+8 為基準）"""
     sb = get_client()
-    today = date.today().isoformat()
+    today = _today_tw()
     result = (
         sb.table("expenses")
         .select("*")
-        .gte("created_at", f"{today}T00:00:00+00:00")
+        .gte("created_at", f"{today}T00:00:00+08:00")
         .order("created_at", desc=False)
         .execute()
     )
@@ -97,14 +103,14 @@ def get_today_summary() -> list[dict]:
 
 
 def get_user_last_expense(user_id: int) -> dict | None:
-    """取得該用戶最後一筆（用於顯示當日累計）"""
+    """取得該用戶最後一筆（用於顯示當日累計，以台灣時間為基準）"""
     sb = get_client()
-    today = date.today().isoformat()
+    today = _today_tw()
     result = (
         sb.table("expenses")
         .select("*")
         .eq("user_id", str(user_id))
-        .gte("created_at", f"{today}T00:00:00+00:00")
+        .gte("created_at", f"{today}T00:00:00+08:00")
         .order("created_at", desc=True)
         .limit(1)
         .execute()
@@ -113,14 +119,14 @@ def get_user_last_expense(user_id: int) -> dict | None:
 
 
 def get_user_today_total(user_id: int) -> float:
-    """取得該用戶今日累計（TWD）"""
+    """取得該用戶今日累計（TWD，以台灣時間為基準）"""
     sb = get_client()
-    today = date.today().isoformat()
+    today = _today_tw()
     result = (
         sb.table("expenses")
         .select("amount_twd")
         .eq("user_id", str(user_id))
-        .gte("created_at", f"{today}T00:00:00+00:00")
+        .gte("created_at", f"{today}T00:00:00+08:00")
         .execute()
     )
     return sum(r["amount_twd"] for r in (result.data or []))

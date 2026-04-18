@@ -282,7 +282,7 @@ export async function fetchTodayExpenses(): Promise<Expense[]> {
   const { data, error } = await supabase
     .from("expenses")
     .select("*")
-    .gte("created_at", `${today}T00:00:00+00:00`)
+    .gte("created_at", `${today}T00:00:00+08:00`)
     .order("created_at", { ascending: true });
   if (error) throw toError(error);
   return data ?? [];
@@ -310,10 +310,10 @@ export function groupByDay(expenses: Expense[]): Array<{ date: string; total: nu
 }
 
 export async function fetchMonthExpenses(year: number, month: number): Promise<Expense[]> {
-  const start = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+00:00`;
+  const start = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+08:00`;
   const endMonth = month === 12 ? 1 : month + 1;
   const endYear = month === 12 ? year + 1 : year;
-  const end = `${endYear}-${String(endMonth).padStart(2, "0")}-01T00:00:00+00:00`;
+  const end = `${endYear}-${String(endMonth).padStart(2, "0")}-01T00:00:00+08:00`;
   const { data, error } = await supabase
     .from("expenses")
     .select("*")
@@ -446,7 +446,7 @@ export async function upsertRetirementGoal(payload: Omit<RetirementGoal, "id" | 
 export async function fetchAvgMonthlyExpenses(lookbackMonths = 3): Promise<number> {
   const start = pastMonthsStart(lookbackMonths);
   const end = currentMonthStart();
-  const { data, error } = await supabase.from("expenses").select("amount_twd").gte("created_at", `${start}T00:00:00+00:00`).lt("created_at", `${end}T00:00:00+00:00`);
+  const { data, error } = await supabase.from("expenses").select("amount_twd").gte("created_at", `${start}T00:00:00+08:00`).lt("created_at", `${end}T00:00:00+08:00`);
   if (error) throw toError(error);
   if (!data || data.length === 0) return 0;
   const total = data.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
