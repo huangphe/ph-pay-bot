@@ -274,15 +274,16 @@ export function fmtMoney(n: number): string {
 // ══════════════════════════════════════════════════════════
 
 export async function fetchTodayExpenses(): Promise<Expense[]> {
-  // Use Taiwan time (UTC+8) to determine "today"
-  const now = new Date();
-  const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-  const today = twTime.toISOString().split("T")[0];
+  // Taiwan "today" 00:00–23:59:59 converted to UTC range
+  const twDate = new Date(Date.now() + 8 * 3600_000).toISOString().split("T")[0];
+  const startUTC = new Date(`${twDate}T00:00:00+08:00`).toISOString();
+  const endUTC   = new Date(`${twDate}T23:59:59+08:00`).toISOString();
 
   const { data, error } = await supabase
     .from("expenses")
     .select("*")
-    .gte("created_at", `${today}T00:00:00+08:00`)
+    .gte("created_at", startUTC)
+    .lte("created_at", endUTC)
     .order("created_at", { ascending: true });
   if (error) throw toError(error);
   return data ?? [];
@@ -310,15 +311,16 @@ export function groupByDay(expenses: Expense[]): Array<{ date: string; total: nu
 }
 
 export async function fetchMonthExpenses(year: number, month: number): Promise<Expense[]> {
-  const start = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+08:00`;
+  const pad = (n: number) => String(n).padStart(2, "0");
   const endMonth = month === 12 ? 1 : month + 1;
-  const endYear = month === 12 ? year + 1 : year;
-  const end = `${endYear}-${String(endMonth).padStart(2, "0")}-01T00:00:00+08:00`;
+  const endYear  = month === 12 ? year + 1 : year;
+  const startUTC = new Date(`${year}-${pad(month)}-01T00:00:00+08:00`).toISOString();
+  const endUTC   = new Date(`${endYear}-${pad(endMonth)}-01T00:00:00+08:00`).toISOString();
   const { data, error } = await supabase
     .from("expenses")
     .select("*")
-    .gte("created_at", start)
-    .lt("created_at", end)
+    .gte("created_at", startUTC)
+    .lt("created_at", endUTC)
     .order("created_at", { ascending: true });
   if (error) throw toError(error);
   return data ?? [];
@@ -446,19 +448,20 @@ export async function upsertRetirementGoal(payload: Omit<RetirementGoal, "id" | 
 export async function fetchAvgMonthlyExpenses(lookbackMonths = 3): Promise<number> {
   const start = pastMonthsStart(lookbackMonths);
   const end = currentMonthStart();
-  const { data, error } = await supabase.from("expenses").select("amount_twd").gte("created_at", `${start}T00:00:00+08:00`).lt("created_at", `${end}T00:00:00+08:00`);
+  const startUTC = new Date(`${start}T00:00:00+08:00`).toISOString();
+  const endUTC   = new Date(`${end}T00:00:00+08:00`).toISOString();
+  const { data, error } = await supabase.from("expenses").select("amount_twd").gte("created_at", startUTC).lt("created_at", endUTC);
   if (error) throw toError(error);
   if (data && data.length > 0) {
     const total = data.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
     return total / lookbackMonths;
   }
   // No complete historical months — fall back to current month total
-  const now = new Date();
-  const twNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  const year = twNow.getUTCFullYear();
-  const month = twNow.getUTCMonth() + 1;
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+08:00`;
-  const { data: cur, error: curErr } = await supabase.from("expenses").select("amount_twd").gte("created_at", monthStart);
+  const twNow = new Date(Date.now() + 8 * 3600_000);
+  const yr = twNow.getUTCFullYear();
+  const mo = twNow.getUTCMonth() + 1;
+  const curStartUTC = new Date(`${yr}-${String(mo).padStart(2, "0")}-01T00:00:00+08:00`).toISOString();
+  const { data: cur, error: curErr } = await supabase.from("expenses").select("amount_twd").gte("created_at", curStartUTC);
   if (curErr) throw toError(curErr);
   if (!cur || cur.length === 0) return 0;
   return cur.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
