@@ -30,7 +30,7 @@ export default async function HomePage() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="glass-card p-5">
           <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">今日總計</p>
           <p className="stat-value">{fmtMoney(total)}</p>
@@ -53,7 +53,7 @@ export default async function HomePage() {
 
       {/* Category Breakdown + Pie Chart */}
       {expenses.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-6">
           {/* Category Bars */}
           <div className="glass-card p-6 space-y-4">
             <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">今日類別</h2>

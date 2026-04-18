@@ -82,8 +82,8 @@ export default async function MonthlyPage({ searchParams }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="glass-card p-5 col-span-2 sm:col-span-1">
+      <div className="grid grid-cols-4 gap-4">
+        <div className="glass-card p-5 col-span-1">
           <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2">月總計</p>
           <p className="stat-value">{fmtMoney(total)}</p>
           <p className="text-[10px] text-zinc-600 mt-1">{expenses.length} 筆</p>
@@ -112,7 +112,7 @@ export default async function MonthlyPage({ searchParams }: Props) {
             <MonthlyBarChart data={barData} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-6">
             <div className="glass-card p-6">
               <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">類別分布</h2>
               <MonthlyPieChart data={pieData} />

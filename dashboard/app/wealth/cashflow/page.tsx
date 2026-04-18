@@ -107,7 +107,7 @@ export default function CashFlowPage() {
         <p className="text-zinc-600 text-sm text-center py-16">載入中…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <StatCard label="月收入" value={fmtMoney(monthlyIncome)} color="green" />
             <StatCard label="月固定支出" value={fmtMoney(monthlyFixed)} color="red" />
             <StatCard label="月變動支出 (均)" value={fmtMoney(avgExpenses)} color="amber" />

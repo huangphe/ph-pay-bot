@@ -54,7 +54,7 @@ export default function AssetsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <StatCard label="總現值" value={fmtMoney(totalValue)} color="green" />
         <StatCard label="總成本" value={fmtMoney(totalCost)} />
         <StatCard
@@ -65,13 +65,13 @@ export default function AssetsPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-6">
         <GlassCard>
           <h2 className="text-sm font-semibold text-zinc-300 mb-4">資產配置</h2>
           <AllocationPie byType={byType} />
         </GlassCard>
 
-        <GlassCard className="md:col-span-1">
+        <GlassCard>
           <h2 className="text-sm font-semibold text-zinc-300 mb-4">資產明細</h2>
           {loading ? (
             <p className="text-zinc-600 text-sm text-center py-8">載入中…</p>

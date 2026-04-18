@@ -137,15 +137,15 @@ export default function ProjectionPage() {
         <p className="text-zinc-600 text-sm text-center py-16">載入中…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <StatCard label="目前淨資產" value={fmtMoney(currentNetWorth)} color={currentNetWorth >= 0 ? "green" : "red"} />
             <StatCard label="月淨儲蓄" value={fmtMoney(monthlySavings)} color={monthlySavings >= 0 ? "green" : "red"} />
             <StatCard label="年儲蓄" value={fmtMoney(monthlySavings * 12)} />
           </div>
 
           {goal && result ? (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <GlassCard className="lg:col-span-2">
+            <div className="grid grid-cols-3 gap-6">
+              <GlassCard className="col-span-2">
                 <h2 className="text-sm font-semibold text-zinc-300 mb-4">淨資產累積圖</h2>
                 <NetWorthChart
                   points={result.points}
