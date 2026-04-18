@@ -448,7 +448,18 @@ export async function fetchAvgMonthlyExpenses(lookbackMonths = 3): Promise<numbe
   const end = currentMonthStart();
   const { data, error } = await supabase.from("expenses").select("amount_twd").gte("created_at", `${start}T00:00:00+08:00`).lt("created_at", `${end}T00:00:00+08:00`);
   if (error) throw toError(error);
-  if (!data || data.length === 0) return 0;
-  const total = data.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
-  return total / lookbackMonths;
+  if (data && data.length > 0) {
+    const total = data.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
+    return total / lookbackMonths;
+  }
+  // No complete historical months — fall back to current month total
+  const now = new Date();
+  const twNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const year = twNow.getUTCFullYear();
+  const month = twNow.getUTCMonth() + 1;
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01T00:00:00+08:00`;
+  const { data: cur, error: curErr } = await supabase.from("expenses").select("amount_twd").gte("created_at", monthStart);
+  if (curErr) throw toError(curErr);
+  if (!cur || cur.length === 0) return 0;
+  return cur.reduce((sum: number, e: { amount_twd: number }) => sum + e.amount_twd, 0);
 }
