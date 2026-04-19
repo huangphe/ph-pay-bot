@@ -4,7 +4,13 @@ import { pastMonthsStart, currentMonthStart, diffInMonths, getTWDate, formatTWDa
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy.supabase.co";
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || "dummy";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: {
+    // 防止 Next.js 快取 Supabase API 回應，確保每次都取得最新資料
+    fetch: (url: RequestInfo | URL, options?: RequestInit) =>
+      fetch(url, { ...options, cache: "no-store" }),
+  },
+});
 
 // Supabase returns PostgrestError (plain object), not Error instances.
 // This helper ensures catch blocks always get a real Error with a readable message.
@@ -306,10 +312,18 @@ export function groupByCategory(expenses: Expense[]): Record<string, number> {
 }
 
 export function groupByDay(expenses: Expense[]): Array<{ date: string; total: number }> {
+  const TW_OFFSET = 8 * 60 * 60 * 1000; // UTC+8 in ms
   const grouped: Record<string, number> = {};
   for (const e of expenses) {
-    const d = formatTWDay(e.created_at);
-    grouped[d] = (grouped[d] ?? 0) + e.amount_twd;
+    const utcMs = new Date(e.created_at).getTime();
+    if (isNaN(utcMs)) continue;
+    // 手動加 8 小時轉為台灣時間，避免 Intl 在不同環境的格式差異
+    const twDate = new Date(utcMs + TW_OFFSET);
+    const y = twDate.getUTCFullYear();
+    const m = String(twDate.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(twDate.getUTCDate()).padStart(2, "0");
+    const key = `${y}-${m}-${d}`;
+    grouped[key] = (grouped[key] ?? 0) + e.amount_twd;
   }
   return Object.entries(grouped).map(([date, total]) => ({ date, total }));
 }
