@@ -82,23 +82,23 @@ export default async function MonthlyPage({ searchParams }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass-card p-5 col-span-1">
-          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2">月總計</p>
-          <p className="stat-value">{fmtMoney(total)}</p>
+          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2 truncate">月總計</p>
+          <p className="stat-value text-xl md:text-3xl">{fmtMoney(total)}</p>
           <p className="text-[10px] text-zinc-600 mt-1">{expenses.length} 筆</p>
         </div>
-        <div className="glass-card p-5">
-          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2">日均支出</p>
-          <p className="stat-value text-2xl">{fmtMoney(total / daysInMonth)}</p>
+        <div className="glass-card p-4 md:p-5">
+          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2 truncate">日均支出</p>
+          <p className="stat-value text-xl md:text-2xl">{fmtMoney(total / daysInMonth)}</p>
         </div>
         {Object.entries(byUser).map(([displayName, amt]) => {
           return (
-            <div key={displayName} className="glass-card p-5">
+            <div key={displayName} className="glass-card p-4 md:p-5">
               <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2 truncate">
                 {displayName}
               </p>
-              <p className="stat-value text-2xl">{fmtMoney(amt)}</p>
+              <p className="stat-value text-xl md:text-2xl">{fmtMoney(amt)}</p>
               <p className="text-[10px] text-zinc-600 mt-1">{total > 0 ? `${(amt/total*100).toFixed(0)}%` : "—"}</p>
             </div>
           );
@@ -112,7 +112,7 @@ export default async function MonthlyPage({ searchParams }: Props) {
             <MonthlyBarChart data={barData} />
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="glass-card p-6">
               <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">類別分布</h2>
               <MonthlyPieChart data={pieData} />

@@ -62,7 +62,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Top stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard label="總資產" value={fmtMoney(totalAssets)} color="green" />
         <StatCard label="總負債" value={fmtMoney(totalLiab)} color="red" />
         <StatCard
@@ -85,7 +85,7 @@ export default async function DashboardPage() {
       </GlassCard>
 
       {/* Monthly cash flow summary */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="月收入" value={fmtMoney(monthlyIncome)} />
         <StatCard label="固定支出" value={fmtMoney(monthlyFixed)} color="red" />
         <StatCard label="變動支出 (均)" value={fmtMoney(avgExpenses)} color="amber" />

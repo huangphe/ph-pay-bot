@@ -9,9 +9,9 @@ interface Props {
 
 const colorMap = {
   default: "stat-value",
-  green: "text-emerald-400 text-3xl font-extrabold tracking-tight",
-  red: "text-red-400 text-3xl font-extrabold tracking-tight",
-  amber: "text-amber-400 text-3xl font-extrabold tracking-tight",
+  green: "text-emerald-400 text-2xl md:text-3xl font-extrabold tracking-tight",
+  red: "text-red-400 text-2xl md:text-3xl font-extrabold tracking-tight",
+  amber: "text-amber-400 text-2xl md:text-3xl font-extrabold tracking-tight",
 };
 
 export default function StatCard({ label, value, sub, color = "default" }: Props) {
