@@ -20,7 +20,9 @@ import MiniNetWorthChart from "@/components/wealth/dashboard/MiniNetWorthChart";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
+export default async function DashboardPage() {
+  const errors: string[] = [];
+  const buildTime = new Date().toISOString();
   const { year: curYear, month: curMonth } = currentYearMonth();
 
   const [assets, liabilities, incomeSources, snapshots, avgExpenses, expensesRaw] =
