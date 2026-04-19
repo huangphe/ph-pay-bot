@@ -30,21 +30,31 @@ export function firstDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }
 
+const TAIWAN_OFFSET = 8 * 60 * 60 * 1000;
+
+/**
+ * 回傳校準後的台灣日期對象 (用於在 UTC Server 取得正確的 TW 年月日)
+ */
+export function getTWDate() {
+  return new Date(Date.now() + TAIWAN_OFFSET);
+}
+
 export function currentYearMonth(): { year: number; month: number } {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const d = getTWDate();
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
 // 取得過去 N 個已完成月份的起始日 (不含本月)
 export function pastMonthsStart(lookback: number): string {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() - lookback, 1);
+  const { year, month } = currentYearMonth();
+  // 使用 JS Date 物件處理月份溢位 (例如 1月減 3 個月)
+  const d = new Date(year, month - 1 - lookback, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 export function currentMonthStart(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const { year, month } = currentYearMonth();
+  return `${year}-${String(month).padStart(2, "0")}-01`;
 }
 
 /**

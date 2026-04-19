@@ -274,16 +274,20 @@ export function fmtMoney(n: number): string {
 // ══════════════════════════════════════════════════════════
 
 export async function fetchTodayExpenses(): Promise<Expense[]> {
-  // Taiwan "today" 00:00–23:59:59 converted to UTC range
-  const twDate = new Date(Date.now() + 8 * 3600_000).toISOString().split("T")[0];
-  const startUTC = new Date(`${twDate}T00:00:00+08:00`).toISOString();
-  const endUTC   = new Date(`${twDate}T23:59:59+08:00`).toISOString();
+  const tw = getTWDate();
+  const yr = tw.getUTCFullYear();
+  const mo = String(tw.getUTCMonth() + 1).padStart(2, "0");
+  const da = String(tw.getUTCDate()).padStart(2, "0");
+  const twDateStr = `${yr}-${mo}-${da}`;
+
+  const startUTC = new Date(`${twDateStr}T00:00:00+08:00`).toISOString();
+  const endUTC   = new Date(new Date(startUTC).getTime() + 24 * 3600_000).toISOString();
 
   const { data, error } = await supabase
     .from("expenses")
     .select("*")
     .gte("created_at", startUTC)
-    .lte("created_at", endUTC)
+    .lt("created_at", endUTC)
     .order("created_at", { ascending: true });
   if (error) throw toError(error);
   return data ?? [];
@@ -457,9 +461,7 @@ export async function fetchAvgMonthlyExpenses(lookbackMonths = 3): Promise<numbe
     return total / lookbackMonths;
   }
   // No complete historical months — fall back to current month total
-  const twNow = new Date(Date.now() + 8 * 3600_000);
-  const yr = twNow.getUTCFullYear();
-  const mo = twNow.getUTCMonth() + 1;
+  const { year: yr, month: mo } = currentYearMonth();
   const curStartUTC = new Date(`${yr}-${String(mo).padStart(2, "0")}-01T00:00:00+08:00`).toISOString();
   const { data: cur, error: curErr } = await supabase.from("expenses").select("amount_twd").gte("created_at", curStartUTC);
   if (curErr) throw toError(curErr);

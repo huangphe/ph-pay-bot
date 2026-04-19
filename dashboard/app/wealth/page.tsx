@@ -11,7 +11,7 @@ import {
   fetchMonthExpenses,
   totalAmount,
 } from "@/lib/supabase";
-import { fmtMoney } from "@/lib/utils";
+import { fmtMoney, currentYearMonth } from "@/lib/utils";
 import { computeMonthlySavings } from "@/lib/projection";
 import StatCard from "@/components/wealth/ui/StatCard";
 import GlassCard from "@/components/wealth/ui/GlassCard";
@@ -21,12 +21,16 @@ import MiniNetWorthChart from "@/components/wealth/dashboard/MiniNetWorthChart";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function DashboardPage() {
-  const errors: string[] = [];
-  const buildTime = new Date().toISOString();
+  const { year: curYear, month: curMonth } = currentYearMonth();
 
+  const [assets, liabilities, incomeSources, snapshots, avgExpenses, expensesRaw] =
+    await Promise.all([
+      fetchAssets().catch((e) => { errors.push(`[fetchAssets]: ${e.message || String(e)}`); return []; }),
+      fetchActiveLiabilities().catch((e) => { errors.push(`[fetchLiabilities]: ${e.message || String(e)}`); return []; }),
+      fetchActiveIncomeSources().catch((e) => { errors.push(`[fetchIncome]: ${e.message || String(e)}`); return []; }),
+      fetchNetWorthSnapshots(12).catch((e) => { errors.push(`[fetchSnapshots]: ${e.message || String(e)}`); return []; }),
       fetchAvgMonthlyExpenses(3).catch((e) => { errors.push(`[fetchAvgExpenses]: ${e.message || String(e)}`); return 0; }),
-      fetchMonthExpenses(new Date().getFullYear(), new Date().getMonth() + 1).catch((e) => { 
+      fetchMonthExpenses(curYear, curMonth).catch((e) => { 
         errors.push(`[fetchCurrentMonth]: ${e.message || String(e)}`); return []; 
       }),
     ]);
