@@ -2,6 +2,7 @@ import {
   fetchMonthExpenses, groupByCategory, groupByDay,
   totalAmount, fmtMoney, getCatMeta, Expense, getDisplayName
 } from "@/lib/supabase";
+import { getTWDate } from "@/lib/utils";
 import { format, getDaysInMonth } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import MonthlyBarChart from "@/components/MonthlyBarChart";
@@ -15,9 +16,14 @@ interface Props {
 }
 
 export default async function MonthlyPage({ searchParams }: Props) {
-  const now = new Date();
-  const year  = parseInt(searchParams.year  ?? String(now.getFullYear()));
-  const month = parseInt(searchParams.month ?? String(now.getMonth() + 1));
+  // 使用台灣時間 (UTC+8) 判斷當前年月日，避免 Vercel UTC 伺服器的時區偏差
+  const twNow = getTWDate();
+  const twYear  = twNow.getUTCFullYear();
+  const twMonth = twNow.getUTCMonth() + 1;
+  const twDay   = twNow.getUTCDate();
+
+  const year  = parseInt(searchParams.year  ?? String(twYear));
+  const month = parseInt(searchParams.month ?? String(twMonth));
 
   const expenses = await fetchMonthExpenses(year, month);
   const total = totalAmount(expenses);
@@ -32,6 +38,10 @@ export default async function MonthlyPage({ searchParams }: Props) {
   }));
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
+  const isCurrentMonth = year === twYear && month === twMonth;
+  // 當月：顯示截至今日（含今天）的天數；歷史月份：顯示整月天數
+  const daysSoFar = isCurrentMonth ? twDay : daysInMonth;
+
   const barData = Array.from({ length: daysInMonth }, (_, i) => {
     const d = i + 1;
     const key = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -49,7 +59,6 @@ export default async function MonthlyPage({ searchParams }: Props) {
   const prevYear  = month === 1 ? year - 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;
   const nextYear  = month === 12 ? year + 1 : year;
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
   return (
     <div className="space-y-8">
@@ -90,7 +99,10 @@ export default async function MonthlyPage({ searchParams }: Props) {
         </div>
         <div className="glass-card p-4 md:p-5">
           <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2 truncate">日均支出</p>
-          <p className="stat-value text-xl md:text-2xl">{fmtMoney(total / daysInMonth)}</p>
+          <p className="stat-value text-xl md:text-2xl">{fmtMoney(daysSoFar > 0 ? total / daysSoFar : 0)}</p>
+          <p className="text-[10px] text-zinc-600 mt-1">
+            {isCurrentMonth ? `截至第 ${daysSoFar} 天` : `共 ${daysInMonth} 天`}
+          </p>
         </div>
         {Object.entries(byUser).map(([displayName, amt]) => {
           return (
