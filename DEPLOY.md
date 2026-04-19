@@ -107,7 +107,7 @@ Telegram → Railway Bot → Supabase DB ← Vercel Dashboard
 Railway 和 Vercel 都需要從 GitHub 部署。在 Terminal 執行：
 
 ```bash
-cd C:\Users\qru70\OneDrive\桌面\Claude
+cd C:\Project\Claude
 git init couple-finance-repo
 cd couple-finance-repo
 xcopy /E /H /I "..\couple-finance\*" "."

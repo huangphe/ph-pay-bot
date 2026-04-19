@@ -5,7 +5,7 @@
 import os
 import re
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
@@ -230,6 +230,28 @@ t_app.add_handler(CallbackQueryHandler(handle_callback))
 t_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 t_app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
 
+async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """每日定時推播當日支出摘要"""
+    logger.info("正在執行每日自動推播任務...")
+    expenses = db.get_today_summary()
+    
+    if not expenses:
+        msg = "🌙 *今日結算*\n今日無支出紀錄，早點休息吧！"
+    else:
+        total = sum(e["amount_twd"] for e in expenses)
+        lines = [f"🌙 *今日支出結算：{fmt_money(total)}*"]
+        for e in expenses:
+            # 移除 @ 符號避免二次 tag，保持整潔
+            name = e.get("user_name", "User").replace("@", "")
+            lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
+        msg = "\n".join(lines)
+
+    for user_id in ALLOWED_USER_IDS:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"發送每日推播失敗 (user_id: {user_id}): {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. 註冊指令選單 (輸入 / 會自動跳出)
@@ -249,6 +271,15 @@ async def lifespan(app: FastAPI):
         await t_app.bot.set_webhook(url=webhook_url)
     
     await t_app.initialize()
+
+    # 3. 註冊每日定時推播 (23:59 UTC+8)
+    if t_app.job_queue:
+        run_time = time(23, 59, 0, tzinfo=timezone(timedelta(hours=8)))
+        t_app.job_queue.run_daily(daily_summary_push, time=run_time)
+        logger.info(f"已排程每日推播任務：{run_time}")
+    else:
+        logger.warning("JobQueue 不可用，請檢查是否安裝了 apscheduler")
+
     await t_app.start()
     yield
     # 關閉時停止
