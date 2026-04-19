@@ -8,6 +8,8 @@ import {
   totalMonthlyLiabilities,
   totalLiabilitiesRemaining,
   totalMonthlyIncome,
+  fetchMonthExpenses,
+  totalAmount,
 } from "@/lib/supabase";
 import { fmtMoney } from "@/lib/utils";
 import { computeMonthlySavings } from "@/lib/projection";
@@ -23,14 +25,13 @@ export default async function DashboardPage() {
   const errors: string[] = [];
   const buildTime = new Date().toISOString();
 
-  const [assets, liabilities, incomeSources, snapshots, avgExpenses] =
-    await Promise.all([
-      fetchAssets().catch((e) => { errors.push(`[fetchAssets]: ${e.message || String(e)}`); return []; }),
-      fetchActiveLiabilities().catch((e) => { errors.push(`[fetchLiabilities]: ${e.message || String(e)}`); return []; }),
-      fetchActiveIncomeSources().catch((e) => { errors.push(`[fetchIncome]: ${e.message || String(e)}`); return []; }),
-      fetchNetWorthSnapshots(12).catch((e) => { errors.push(`[fetchSnapshots]: ${e.message || String(e)}`); return []; }),
       fetchAvgMonthlyExpenses(3).catch((e) => { errors.push(`[fetchAvgExpenses]: ${e.message || String(e)}`); return 0; }),
+      fetchMonthExpenses(new Date().getFullYear(), new Date().getMonth() + 1).catch((e) => { 
+        errors.push(`[fetchCurrentMonth]: ${e.message || String(e)}`); return []; 
+      }),
     ]);
+
+  const currentMonthTotal = totalAmount(expensesRaw as any);
 
   const totalAssets = totalAssetValue(assets);
   const totalLiab = totalLiabilitiesRemaining(liabilities);
@@ -56,46 +57,70 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-100">總覽</h1>
-        <p className="text-sm text-zinc-500 mt-1">資產負債表 · 今日快照</p>
-      </div>
+      {/* SECTION 1: 🧊 財務快照 (資產負債表) */}
+      <section className="space-y-6">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg font-black text-white">🧊 財務快照</h2>
+          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">資產負債 · 昨日今日</p>
+        </div>
 
-      {/* Top stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="總資產" value={fmtMoney(totalAssets)} color="green" />
-        <StatCard label="總負債" value={fmtMoney(totalLiab)} color="red" />
-        <StatCard
-          label="淨資產"
-          value={fmtMoney(netWorth)}
-          color={netWorth >= 0 ? "green" : "red"}
-        />
-      </div>
+        {/* Top stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <StatCard label="總資產" value={fmtMoney(totalAssets)} color="green" />
+          <StatCard label="總負債" value={fmtMoney(totalLiab)} color="red" />
+          <StatCard
+            label="淨資產"
+            value={fmtMoney(netWorth)}
+            color={netWorth >= 0 ? "green" : "red"}
+          />
+        </div>
 
-      {/* Balance sheet */}
-      <GlassCard>
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">資產負債表</h2>
-        <BalanceSheetSummary assets={assets} liabilities={liabilities} />
-      </GlassCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Balance sheet */}
+          <GlassCard>
+            <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">資產負債明細</h2>
+            <BalanceSheetSummary assets={assets} liabilities={liabilities} />
+          </GlassCard>
 
-      {/* Net worth chart */}
-      <GlassCard>
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">淨資產歷史</h2>
-        <MiniNetWorthChart snapshots={snapshots} />
-      </GlassCard>
+          {/* Net worth chart */}
+          <GlassCard>
+            <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">淨資產增長歷史</h2>
+            <MiniNetWorthChart snapshots={snapshots} />
+          </GlassCard>
+        </div>
+      </section>
 
-      {/* Monthly cash flow summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="月收入" value={fmtMoney(monthlyIncome)} />
-        <StatCard label="固定支出" value={fmtMoney(monthlyFixed)} color="red" />
-        <StatCard label="變動支出 (均)" value={fmtMoney(avgExpenses)} color="amber" />
-        <StatCard
-          label="月淨儲蓄"
-          value={fmtMoney(monthlySavings)}
-          color={monthlySavings >= 0 ? "green" : "red"}
-          sub={`儲蓄率 ${monthlyIncome > 0 ? ((monthlySavings / monthlyIncome) * 100).toFixed(1) : 0}%`}
-        />
-      </div>
+      {/* Divider */}
+      <div className="h-px bg-white/[0.05] my-4" />
+
+      {/* SECTION 2: 🌊 現金流健康診斷 (月度收支) */}
+      <section className="space-y-6">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg font-black text-white">🌊 現金流健康診斷</h2>
+          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">收支能力 · 月度分析</p>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="預估月收入" value={fmtMoney(monthlyIncome)} />
+          <StatCard label="固定支出 (房租貸款)" value={fmtMoney(monthlyFixed)} color="red" />
+          <StatCard 
+            label="變動支出 (本月累計)" 
+            value={fmtMoney(currentMonthTotal)} 
+            color="amber" 
+            sub={`長期平均：${fmtMoney(avgExpenses)}`}
+          />
+          <StatCard
+            label="預計月儲蓄"
+            value={fmtMoney(monthlySavings)}
+            color={monthlySavings >= 0 ? "green" : "red"}
+            sub={`儲蓄率 ${monthlyIncome > 0 ? ((monthlySavings / monthlyIncome) * 100).toFixed(1) : 0}%`}
+          />
+        </div>
+
+        <div className="bg-amber-950/20 border border-amber-500/20 p-4 rounded-xl text-xs text-amber-200/70 leading-relaxed italic">
+          💡 <strong>專家提醒：</strong>變動支出（本月累計）僅供即時參考。資產負債表反映的是長期身價，而現金流則是您財富增長的引擎。變動支出較平均值高時，可能會延緩您淨資產的累積速度。
+        </div>
+      </section>
     </div>
   );
 }
