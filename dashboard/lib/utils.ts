@@ -30,6 +30,20 @@ export function firstDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }
 
+/**
+ * 強制以 Asia/Taipei 時區將日期格式化為 YYYY-MM-DD
+ */
+export function formatTWDay(dateInput: string | Date | number): string {
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d);
+}
+
 const TAIWAN_OFFSET = 8 * 60 * 60 * 1000;
 
 /**

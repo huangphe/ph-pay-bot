@@ -66,10 +66,15 @@ export default function ExpenseTable({ initialExpenses, showDate = false }: Expe
     }
   };
 
-  const toTaiwanTime = (utcStr: string): Date => {
-    const d = new Date(utcStr);
-    d.setHours(d.getHours() + 8);
-    return d;
+  const formatTW = (utcStr: string, options: Intl.DateTimeFormatOptions) => {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Taipei',
+        ...options
+      }).format(new Date(utcStr));
+    } catch {
+      return "—";
+    }
   };
 
   if (expenses.length === 0) {
@@ -107,8 +112,9 @@ export default function ExpenseTable({ initialExpenses, showDate = false }: Expe
           {sortedExpenses.map((e) => {
             const isEditing = editingId === e.id;
             const { icon } = getCatMeta(isEditing ? editForm!.category : e.category);
-            const twTime = toTaiwanTime(e.created_at);
-            const timeStr = `${twTime.getHours().toString().padStart(2, "0")}:${twTime.getMinutes().toString().padStart(2, "0")}`;
+            
+            const dateStr = formatTW(e.created_at, { month: 'numeric', day: 'numeric' });
+            const timeStr = formatTW(e.created_at, { hour: '2-digit', minute: '2-digit', hour12: false });
 
             // 統一名稱格式
             const displayName = getDisplayName(e);
@@ -158,7 +164,7 @@ export default function ExpenseTable({ initialExpenses, showDate = false }: Expe
 
                 {showDate && (
                   <td className="px-6 py-3 text-zinc-600 text-[10px] font-mono whitespace-nowrap">
-                    {format(twTime, "M/d")}
+                    {dateStr}
                   </td>
                 )}
 

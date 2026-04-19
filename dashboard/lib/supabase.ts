@@ -308,7 +308,7 @@ export function groupByCategory(expenses: Expense[]): Record<string, number> {
 export function groupByDay(expenses: Expense[]): Array<{ date: string; total: number }> {
   const grouped: Record<string, number> = {};
   for (const e of expenses) {
-    const d = e.created_at.split("T")[0];
+    const d = formatTWDay(e.created_at);
     grouped[d] = (grouped[d] ?? 0) + e.amount_twd;
   }
   return Object.entries(grouped).map(([date, total]) => ({ date, total }));
