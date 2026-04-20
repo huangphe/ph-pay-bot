@@ -28,6 +28,7 @@ RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "") # Render 自動�
 ALLOWED_USER_IDS: set[int] = set(
     int(x) for x in os.environ.get("ALLOWED_USER_IDS", "").split(",") if x.strip()
 )
+PUSH_TOKEN = os.environ.get("PUSH_TOKEN", "default_token_please_change")
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -230,10 +231,15 @@ t_app.add_handler(CallbackQueryHandler(handle_callback))
 t_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 t_app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
 
-async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """每日定時推播當日支出摘要"""
+async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE = None, bot = None) -> None:
+    """每日定時推播當日及當月支出摘要"""
     logger.info("正在執行每日自動推播任務...")
+    
+    # 優先使用參數傳入的 bot，其次使用 context.bot，最後使用全域 t_app.bot
+    actual_bot = bot if bot else (context.bot if context else t_app.bot)
+    
     expenses = db.get_today_summary()
+    month_total = db.get_current_month_total()
     
     if not expenses:
         msg = "🌙 *今日結算*\n今日無支出紀錄，早點休息吧！"
@@ -246,9 +252,12 @@ async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
             lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
         msg = "\n".join(lines)
 
+    # 加入當月累計資訊
+    msg += f"\n\n📊 *本月累計支出：{fmt_money(month_total)}*"
+
     for user_id in ALLOWED_USER_IDS:
         try:
-            await context.bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
+            await actual_bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
         except Exception as e:
             logger.error(f"發送每日推播失敗 (user_id: {user_id}): {e}")
 
@@ -291,6 +300,14 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/")
 async def index():
     return {"status": "ok", "bot": "PH_Pay_Bot"}
+
+@app.get("/api/push-daily-summary")
+async def trigger_push(token: str = ""):
+    if not PUSH_TOKEN or token != PUSH_TOKEN:
+        return Response(content="Unauthorized", status_code=401)
+    
+    await daily_summary_push()
+    return {"status": "success", "message": "Push triggered"}
 
 @app.post("/webhook")
 async def webhook(request: Request):

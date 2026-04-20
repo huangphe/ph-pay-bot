@@ -132,14 +132,37 @@ def get_user_today_total(user_id: int) -> float:
     return sum(r["amount_twd"] for r in (result.data or []))
 
 
-def get_month_expenses(year: int, month: int) -> list[dict]:
-    """取得指定月份所有支出"""
+def get_current_month_total() -> float:
+    """取得本月累計支出（TWD，以台灣時間為基準）"""
     sb = get_client()
-    start = f"{year}-{month:02d}-01T00:00:00+00:00"
+    now = datetime.now(TW)
+    year, month = now.year, now.month
+    
+    start = f"{year}-{month:02d}-01T00:00:00+08:00"
     if month == 12:
-        end = f"{year + 1}-01-01T00:00:00+00:00"
+        end = f"{year + 1}-01-01T00:00:00+08:00"
     else:
-        end = f"{year}-{month + 1:02d}-01T00:00:00+00:00"
+        end = f"{year}-{month + 1:02d}-01T00:00:00+08:00"
+        
+    result = (
+        sb.table("expenses")
+        .select("amount_twd")
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .execute()
+    )
+    return sum(r["amount_twd"] for r in (result.data or []))
+
+
+def get_month_expenses(year: int, month: int) -> list[dict]:
+    """取得指定月份所有支出 (以台灣時間 UTC+8 為基準)"""
+    sb = get_client()
+    start = f"{year}-{month:02d}-01T00:00:00+08:00"
+    if month == 12:
+        end = f"{year + 1}-01-01T00:00:00+08:00"
+    else:
+        end = f"{year}-{month + 1:02d}-01T00:00:00+08:00"
+    
     result = (
         sb.table("expenses")
         .select("*")

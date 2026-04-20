@@ -129,3 +129,22 @@ git push -u origin main
 | Vercel 儀表板 | **$0**（永久免費） |
 | 匯率 API | **$0**（open.er-api.com 無限免費） |
 | **總計** | **$0 / 月** |
+| [修正] 每日推播 | 需設定外部 Cron |
+
+---
+
+## 🛠️ 進階：修復每日定時推播 (Render 免費版)
+
+由於 Render 免費方案會休眠，導致內建推播失效。請依照以下步驟修復：
+
+### 1. 設定安全權杖 (Token)
+在 Render 的 **Environment Variables** 新增：
+- `PUSH_TOKEN`: 設定一個只有您知道的字串（如 `mysecret123`）。
+
+### 2. 設定外部定時觸發器
+1. 前往 [cron-job.org](https://cron-job.org)（免費）。
+2. 建立一個新任務：
+   - **URL**: `https://<您的-render-網址>/api/push-daily-summary?token=<您的-PUSH_TOKEN>`
+   - **Schedule**: 每天 23:59
+   - **Timezone**: Asia/Taipei (UTC+8)
+3. 儲存後，該服務會每天準時「喚醒」您的 Bot 並發送當日及當月結算。
