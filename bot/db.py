@@ -88,14 +88,28 @@ def add_category(name: str, icon: str = "💰", color: str = "#6B7280") -> dict:
 
 # ── 查詢 ──────────────────────────────────────────────────
 
-def get_today_summary() -> list[dict]:
-    """取得今日所有支出（以台灣時間 UTC+8 為基準）"""
+def get_today_summary(target_date: str | None = None) -> list[dict]:
+    """取得目標日期所有支出（以台灣時間 UTC+8 為基準）。
+    若在凌晨 (00-04) 執行且未指定日期，自動回溯至昨天。
+    """
     sb = get_client()
-    today = _today_tw()
+    if not target_date:
+        now = datetime.now(TW)
+        if now.hour < 4:
+            target_date = (now - timedelta(days=1)).date().isoformat()
+        else:
+            target_date = now.date().isoformat()
+    else:
+        # 確保 target_date 只有日期部分
+        if "T" in target_date:
+            target_date = target_date.split("T")[0]
+            
+    logger.info(f"查詢今日摘要，日期: {target_date}")
     result = (
         sb.table("expenses")
         .select("*")
-        .gte("created_at", f"{today}T00:00:00+08:00")
+        .gte("created_at", f"{target_date}T00:00:00+08:00")
+        .lt("created_at", f"{target_date}T23:59:59.999+08:00")
         .order("created_at", desc=False)
         .execute()
     )
@@ -132,18 +146,35 @@ def get_user_today_total(user_id: int) -> float:
     return sum(r["amount_twd"] for r in (result.data or []))
 
 
-def get_current_month_total() -> float:
-    """取得本月累計支出（TWD，以台灣時間為基準）"""
+def get_current_month_total(target_date: str | None = None) -> float:
+    """取得本月累計支出（TWD，以台灣時間為基準）。
+    若在月初凌晨執行且未指定日期，自動回溯至上個月。
+    """
     sb = get_client()
-    now = datetime.now(TW)
+    if target_date:
+        try:
+            # 支援 YYYY-MM-DD 或完整 ISO
+            if "T" in target_date:
+                now = datetime.fromisoformat(target_date.replace("Z", "+00:00")).astimezone(TW)
+            else:
+                now = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=TW)
+        except Exception as e:
+            logger.warning(f"解析目標日期失敗 ({target_date})，使用目前時間: {e}")
+            now = datetime.now(TW)
+    else:
+        now = datetime.now(TW)
+        if now.day == 1 and now.hour < 4:
+            now = now - timedelta(days=1)
+            
     year, month = now.year, now.month
-    
     start = f"{year}-{month:02d}-01T00:00:00+08:00"
+    
     if month == 12:
         end = f"{year + 1}-01-01T00:00:00+08:00"
     else:
         end = f"{year}-{month + 1:02d}-01T00:00:00+08:00"
         
+    logger.info(f"查詢本月總計，範圍: {start} -> {end}")
     result = (
         sb.table("expenses")
         .select("amount_twd")

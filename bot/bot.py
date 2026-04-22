@@ -231,67 +231,92 @@ t_app.add_handler(CallbackQueryHandler(handle_callback))
 t_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 t_app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
 
-async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE = None, bot = None) -> None:
+async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE = None, bot = None, target_date: str | None = None) -> None:
     """每日定時推播當日及當月支出摘要"""
-    logger.info("正在執行每日自動推播任務...")
-    
-    # 優先使用參數傳入的 bot，其次使用 context.bot，最後使用全域 t_app.bot
-    actual_bot = bot if bot else (context.bot if context else t_app.bot)
-    
-    expenses = db.get_today_summary()
-    month_total = db.get_current_month_total()
-    
-    if not expenses:
-        msg = "🌙 *今日結算*\n今日無支出紀錄，早點休息吧！"
-    else:
-        total = sum(e["amount_twd"] for e in expenses)
-        lines = [f"🌙 *今日支出結算：{fmt_money(total)}*"]
-        for e in expenses:
-            # 移除 @ 符號避免二次 tag，保持整潔
-            name = e.get("user_name", "User").replace("@", "")
-            lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
-        msg = "\n".join(lines)
+    try:
+        logger.info(f"🚀 開始執行每日自動推播任務 (目標日期: {target_date or '自動判定'})")
+        
+        # 優先使用參數傳入的 bot，其次使用 context.bot，最後使用全域 t_app.bot
+        actual_bot = bot if bot else (context.bot if context else t_app.bot)
+        
+        if not actual_bot:
+            logger.error("❌ 無法取得 Bot 實體，推播中止")
+            return
 
-    # 加入當月累計資訊
-    msg += f"\n\n📊 *本月累計支出：{fmt_money(month_total)}*"
+        expenses = db.get_today_summary(target_date=target_date)
+        month_total = db.get_current_month_total(target_date=target_date)
+        
+        if not expenses:
+            msg = "🌙 *今日結算*\n今日無支出紀錄，早點休息吧！"
+            logger.info("ℹ️ 今日無支出紀錄")
+        else:
+            total = sum(e["amount_twd"] for e in expenses)
+            lines = [f"🌙 *今日支出結算：{fmt_money(total)}*"]
+            for e in expenses:
+                # 移除 @ 符號避免二次 tag，保持整潔
+                name = e.get("user_name", "User").replace("@", "")
+                lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
+            msg = "\n".join(lines)
+            logger.info(f"✅ 已生成摘要，共 {len(expenses)} 筆支出")
 
-    for user_id in ALLOWED_USER_IDS:
-        try:
-            await actual_bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
-        except Exception as e:
-            logger.error(f"發送每日推播失敗 (user_id: {user_id}): {e}")
+        # 加入當月累計資訊
+        msg += f"\n\n📊 *本月累計支出：{fmt_money(month_total)}*"
+
+        for user_id in ALLOWED_USER_IDS:
+            try:
+                await actual_bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
+                logger.info(f"📤 已向 ID:{user_id} 發送推播")
+            except Exception as e:
+                logger.error(f"❌ 發送每日推播失敗 (user_id: {user_id}): {e}")
+                
+    except Exception as e:
+        logger.error(f"🔥 daily_summary_push 發生未預期錯誤: {e}", exc_info=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. 註冊指令選單 (輸入 / 會自動跳出)
-    commands = [
-        BotCommand("today", "📊 查看今日消費摘要"),
-        BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
-        BotCommand("id", "👤 查看您的 Telegram ID"),
-        BotCommand("start", "🏠 顯示使用幫助")
-    ]
-    await t_app.bot.set_my_commands(commands)
-    logger.info("已更新 Telegram 指令選單")
-
-    # 2. 啟動時設定 Webhook
-    if RENDER_EXTERNAL_URL:
-        webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
-        logger.info(f"正在設定 Webhook: {webhook_url}")
-        await t_app.bot.set_webhook(url=webhook_url)
+    logger.info("🛠️ 應用程式啟動中 (Lifespan Start)")
     
-    await t_app.initialize()
+    try:
+        # 1. 註冊指令選單
+        commands = [
+            BotCommand("today", "📊 查看今日消費摘要"),
+            BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
+            BotCommand("id", "👤 查看您的 Telegram ID"),
+            BotCommand("start", "🏠 顯示使用幫助")
+        ]
+        await t_app.bot.set_my_commands(commands)
+        logger.info("✅ 已更新 Telegram 指令選單")
 
-    # 3. 註冊每日定時推播 (23:59 UTC+8)
-    if t_app.job_queue:
-        run_time = time(23, 59, 0, tzinfo=timezone(timedelta(hours=8)))
-        t_app.job_queue.run_daily(daily_summary_push, time=run_time)
-        logger.info(f"已排程每日推播任務：{run_time}")
-    else:
-        logger.warning("JobQueue 不可用，請檢查是否安裝了 apscheduler")
+        # 2. 啟動時設定 Webhook
+        if RENDER_EXTERNAL_URL:
+            webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
+            logger.info(f"🌐 正在設定 Webhook: {webhook_url}")
+            await t_app.bot.set_webhook(url=webhook_url)
+        else:
+            logger.warning("⚠️ RENDER_EXTERNAL_URL 未設定，跳過 Webhook 註冊")
+        
+        # 3. 初始化 Application
+        await t_app.initialize()
+        logger.info("🤖 Telegram Bot 已完成初始化")
 
-    await t_app.start()
+        # 4. 註冊每日定時推播 (提前至 23:58 UTC+8)
+        if t_app.job_queue:
+            run_time = time(23, 58, 0, tzinfo=timezone(timedelta(hours=8)))
+            t_app.job_queue.run_daily(daily_summary_push, time=run_time)
+            logger.info(f"⏰ 已排程每日推播任務：{run_time}")
+        else:
+            logger.warning("⚠️ JobQueue 不可用 (apscheduler 未安裝或版本不相容)")
+
+        await t_app.start()
+        logger.info("🚀 應用程式已全面啟動")
+        
+    except Exception as e:
+        logger.error(f"❌ 啟動過程中發生嚴重錯誤: {e}", exc_info=True)
+        # 不要重新拋出異常，讓 FastAPI 至少能返回 200 (Index)，方便除錯
+        
     yield
-    # 關閉時停止
+    
+    logger.info("🛑 應用程式關閉中")
     await t_app.stop()
     await t_app.shutdown()
 
@@ -302,12 +327,12 @@ async def index():
     return {"status": "ok", "bot": "PH_Pay_Bot"}
 
 @app.get("/api/push-daily-summary")
-async def trigger_push(token: str = ""):
+async def trigger_push(token: str = "", date: str | None = None):
     if not PUSH_TOKEN or token != PUSH_TOKEN:
         return Response(content="Unauthorized", status_code=401)
     
-    await daily_summary_push()
-    return {"status": "success", "message": "Push triggered"}
+    await daily_summary_push(target_date=date)
+    return {"status": "success", "message": f"Push triggered for date: {date or 'auto'}"}
 
 @app.post("/webhook")
 async def webhook(request: Request):
