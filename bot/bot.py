@@ -5,6 +5,7 @@
 import os
 import re
 import logging
+import asyncio
 from datetime import datetime, timezone, timedelta, time
 from contextlib import asynccontextmanager
 
@@ -35,6 +36,8 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+bot_ready_event = asyncio.Event()
 
 # ── 紀錄者名稱對照表 ──────────────────────────────────────
 # 請將 Telegram ID 對照到您想要的名稱
@@ -139,7 +142,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "• /today - 查看今日消費統計\n"
         "• /del - 刪除最後一筆紀錄\n"
         "• /id - 查看個人 Telegram ID\n\n"
-        f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL})"
+        f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL}?token={PUSH_TOKEN})"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
 
@@ -272,12 +275,17 @@ async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE = None, bot = No
     except Exception as e:
         logger.error(f"🔥 daily_summary_push 發生未預期錯誤: {e}", exc_info=True)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("🛠️ 應用程式啟動中 (Lifespan Start)")
-    
+async def setup_bot():
+    """異步完成 Bot 的重型初始化工作，不阻塞 FastAPI 啟動"""
     try:
-        # 1. 註冊指令選單
+        logger.info("🤖 開始背景初始化 Bot...")
+        
+        # 1. 基礎初始化
+        await t_app.initialize()
+        await t_app.start()
+        logger.info("✅ Bot 核心實例已啟動")
+
+        # 2. 註冊指令選單
         commands = [
             BotCommand("today", "📊 查看今日消費摘要"),
             BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
@@ -285,38 +293,45 @@ async def lifespan(app: FastAPI):
             BotCommand("start", "🏠 顯示使用幫助")
         ]
         await t_app.bot.set_my_commands(commands)
-        logger.info("✅ 已更新 Telegram 指令選單")
+        logger.info("✅ 指令選單已更新")
 
-        # 2. 啟動時設定 Webhook
-        if RENDER_EXTERNAL_URL:
-            webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
-            logger.info(f"🌐 正在設定 Webhook: {webhook_url}")
+        # 3. 設定 Webhook (確保網址正確)
+        url = RENDER_EXTERNAL_URL
+        if url:
+            if not url.startswith("http"):
+                url = f"https://{url}"
+            webhook_url = f"{url.rstrip('/')}/webhook"
+            logger.info(f"🌐 正在註冊 Webhook: {webhook_url}")
             await t_app.bot.set_webhook(url=webhook_url)
+            logger.info("✅ Webhook 註冊成功")
         else:
-            logger.warning("⚠️ RENDER_EXTERNAL_URL 未設定，跳過 Webhook 註冊")
-        
-        # 3. 初始化 Application
-        await t_app.initialize()
-        logger.info("🤖 Telegram Bot 已完成初始化")
+            logger.warning("⚠️ 未設定 RENDER_EXTERNAL_URL，Webhook 可能無法運作")
 
-        # 4. 註冊每日定時推播 (提前至 23:58 UTC+8)
+        # 4. 註冊每日定時推播
         if t_app.job_queue:
             run_time = time(23, 58, 0, tzinfo=timezone(timedelta(hours=8)))
+            # 先移除舊的避免重複 (雖然 initialize 應該會處理)
             t_app.job_queue.run_daily(daily_summary_push, time=run_time)
             logger.info(f"⏰ 已排程每日推播任務：{run_time}")
-        else:
-            logger.warning("⚠️ JobQueue 不可用 (apscheduler 未安裝或版本不相容)")
+        
+        bot_ready_event.set()
+        logger.info("🚀 Bot 全面就緒！")
 
-        await t_app.start()
-        logger.info("🚀 應用程式已全面啟動")
-        
     except Exception as e:
-        logger.error(f"❌ 啟動過程中發生嚴重錯誤: {e}", exc_info=True)
-        # 不要重新拋出異常，讓 FastAPI 至少能返回 200 (Index)，方便除錯
-        
+        logger.error(f"❌ Bot 初始化過程發生錯誤: {e}", exc_info=True)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🛠️ FastAPI 服務啟動中...")
+    
+    # 將 Bot 初始化丟到背景執行，讓 FastAPI 立即開始監聽 Port
+    import asyncio
+    setup_task = asyncio.create_task(setup_bot())
+    
     yield
     
-    logger.info("🛑 應用程式關閉中")
+    logger.info("🛑 服務關閉中...")
+    setup_task.cancel()
     await t_app.stop()
     await t_app.shutdown()
 
@@ -330,6 +345,9 @@ async def index():
 async def trigger_push(token: str = "", date: str | None = None):
     if not PUSH_TOKEN or token != PUSH_TOKEN:
         return Response(content="Unauthorized", status_code=401)
+    
+    # 確保 Bot 已經初始化完畢 (避免喚醒瞬間並行呼叫導致未初始化錯誤)
+    await bot_ready_event.wait()
     
     await daily_summary_push(target_date=date)
     return {"status": "success", "message": f"Push triggered for date: {date or 'auto'}"}
