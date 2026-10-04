@@ -1,6 +1,7 @@
 """
-夫妻記帳本 — Telegram Bot (純 Polling 輪詢版)
-專為 Railway Worker、VPS、本機或 Docker 長駐設計，免 Webhook、免公網域名、無休眠阻礙
+夫妻記帳本 — Telegram Bot (純 Polling 輪詢版 + Render 存活檢查)
+專為 Render 免費層、Railway、VPS 或 Docker 長駐設計
+功能支援：文字記帳、發票拍照、語音記帳、本月統計、底部常駐選單、AI 財務洞察
 """
 
 import os
@@ -10,7 +11,10 @@ import asyncio
 from datetime import datetime, timezone, timedelta, time
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand,
+    ReplyKeyboardMarkup
+)
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters,
@@ -42,11 +46,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── 紀錄者名稱對照表 ──────────────────────────────────────
-# 可將 Telegram ID 映射至暱稱標籤
 USER_NAME_MAP = {
     5725029188: "@HAO",
     8514343851: "@WU",
 }
+
+# ── Telegram 底部常駐選單按鈕 (功能 3) ───────────────────────
+MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["📊 今日消費", "📅 本月統計"],
+        ["🗑️ 刪除上一筆", "🌐 開啟儀表板"],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
 
 # ── 工具函數 ───────────────────────────────────────────────
 
@@ -143,21 +156,29 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     welcome_text = (
         "👋 *歡迎使用夫妻記帳本！*\n\n"
         "這是您的專屬記帳助理，支援以下輸入方式：\n\n"
-        "📖 *快速記帳*\n"
+        "📖 *快速文字記帳*\n"
         "• 直接輸入 `100 晚餐` 或 `便當 120` (順序不受限)\n"
         "• 支援一次多筆：以換行或逗號分隔，例如：\n"
         "  `50 飲料` \n"
         "  `150 午餐` \n\n"
+        "🎙️ *語音記帳*\n"
+        "• 直接錄製一段語音（如「晚餐 120」），AI 會自動轉文字並記錄。\n\n"
         "📸 *拍照辨識*\n"
-        "• 傳送發票或收據照片，AI 會自動辨識金額並紀錄。\n\n"
-        "📊 *系統指令*\n"
+        "• 傳送發票或收據照片，AI 自動辨識金額與品項。\n\n"
+        "📊 *系統指令與按鈕*\n"
         "• /today - 查看今日消費統計\n"
+        "• /month - 查看本月詳細概況與 AI 財務評語\n"
         "• /del - 刪除最後一筆紀錄\n"
         "• /id - 查看個人 Telegram ID\n\n"
         f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL}?token={PUSH_TOKEN})"
     )
     if update.message:
-        await update.message.reply_text(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
+        await update.message.reply_text(
+            welcome_text,
+            parse_mode="Markdown",
+            disable_web_page_preview=True,
+            reply_markup=MAIN_MENU_KEYBOARD  # 附帶常駐底部按鈕
+        )
 
 async def cmd_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user and update.message:
@@ -171,11 +192,62 @@ async def cmd_today(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("📊 今日尚無記帳紀錄。")
         return
     total = sum(e["amount_twd"] for e in expenses)
-    lines = [f"🌙 *今日累計：{fmt_money(total)}*"]
+    lines = [f"🌙 *今日累計：{fmt_money(total)}* (共 {len(expenses)} 筆)"]
     for e in expenses:
         name = e.get("user_name", "User").replace("@", "")
         lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+# ── 功能 1 & 6：本月概況指令與 AI 財務點評 ─────────────────────
+
+async def cmd_month(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """查詢當月消費詳細概況與 AI 財務洞察"""
+    if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
+        return
+    
+    status_msg = await update.message.reply_text("⏳ *正在整理本月消費統計與 AI 分析...*", parse_mode="Markdown")
+    try:
+        m_data = db.get_month_detail_summary()
+        total = m_data.get("total", 0)
+        count = m_data.get("count", 0)
+        year = m_data.get("year", 2026)
+        month = m_data.get("month", 10)
+        
+        if count == 0:
+            await status_msg.edit_text(f"📅 *{year} 年 {month} 月尚無任何消費紀錄。*")
+            return
+            
+        lines = [
+            f"📅 *{year} 年 {month} 月消費概況*",
+            f"💰 *本月累計支出：{fmt_money(total)}* (共 {count} 筆)",
+        ]
+        
+        # 兩人分攤
+        by_user = m_data.get("by_user", {})
+        if by_user and total > 0:
+            lines.append("\n👥 *成員各自支出*：")
+            for user_name, amt in by_user.items():
+                clean_name = user_name.replace("@", "")
+                pct = (amt / total) * 100
+                lines.append(f"• @{clean_name}: {fmt_money(amt)} ({pct:.0f}%)")
+                
+        # 類別排行
+        by_cat = m_data.get("by_cat", [])
+        if by_cat and total > 0:
+            lines.append("\n🏷️ *類別支出排行 (Top 4)*：")
+            for i, (cat, amt) in enumerate(by_cat[:4], 1):
+                pct = (amt / total) * 100
+                lines.append(f"{i}. {classifier.get_icon(cat)} {cat}: {fmt_money(amt)} ({pct:.0f}%)")
+                
+        # 呼叫 Gemini 生成財務洞察評語 (功能 6)
+        insight = await ai.generate_financial_insight(m_data)
+        if insight:
+            lines.append(f"\n💡 *AI 財務管家點評*：\n{insight}")
+            
+        await status_msg.edit_text("\n".join(lines), parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"cmd_month error: {e}", exc_info=True)
+        await status_msg.edit_text("⚠️ 查詢本月統計失敗，請稍後再試。")
 
 async def cmd_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
@@ -186,11 +258,30 @@ async def cmd_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text("⚠️ 無可刪除紀錄。")
 
+# ── 訊息與常駐按鈕處理 (功能 3) ─────────────────────────────
+
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message or not update.message.text:
         return
     user = update.effective_user
     full_text = update.message.text.strip()
+    
+    # 攔截底部快捷選單按鈕
+    if full_text == "📊 今日消費":
+        await cmd_today(update, ctx)
+        return
+    elif full_text == "📅 本月統計":
+        await cmd_month(update, ctx)
+        return
+    elif full_text == "🗑️ 刪除上一筆":
+        await cmd_del(update, ctx)
+        return
+    elif full_text == "🌐 開啟儀表板":
+        dashboard_msg = f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL}?token={PUSH_TOKEN})"
+        await update.message.reply_text(dashboard_msg, parse_mode="Markdown", disable_web_page_preview=True)
+        return
+    
+    # 走一般快速文字記帳
     segments = re.split(r'[,，\n；;]', full_text)
     results = []
     
@@ -220,6 +311,66 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
             for p in results
         ])
         await update.message.reply_text(msg, parse_mode="Markdown")
+
+# ── 功能 5：AI 語音記帳處理器 ────────────────────────────────
+
+async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """接收並解析語音訊息，自動轉文字並完成記帳"""
+    if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
+        return
+    
+    user = update.effective_user
+    voice = update.message.voice or update.message.audio
+    if not voice:
+        return
+        
+    status_msg = await update.message.reply_text("🎙️ *正在聆聽並辨識語音記帳...*", parse_mode="Markdown")
+    try:
+        import io
+        file = await voice.get_file()
+        buf = io.BytesIO()
+        await file.download_to_memory(out=buf)
+        audio_bytes = buf.getvalue()
+        
+        mime = getattr(voice, "mime_type", "audio/ogg") or "audio/ogg"
+        transcribed_text = await ai.transcribe_voice(audio_bytes, mime_type=mime)
+        
+        if not transcribed_text:
+            await status_msg.edit_text("❌ 未能識別語音內容，請重試或以文字輸入。")
+            return
+            
+        p = await parse_quick_add(transcribed_text)
+        if not p:
+            await status_msg.edit_text(f"🎙️ 語音辨識：`{transcribed_text}`\n⚠️ 未能辨識出有效金額與品項，請手動確認。")
+            return
+            
+        mapped_name = USER_NAME_MAP.get(user.id)
+        if mapped_name:
+            recorder_name = mapped_name
+        elif "wu" in (user.full_name or "").lower() or "wu" in (user.username or "").lower():
+            recorder_name = "@WU"
+        else:
+            raw_name = user.full_name or user.username or user.first_name or str(user.id)
+            recorder_name = f"@{raw_name}" if not raw_name.startswith("@") else raw_name
+            
+        record = db.add_expense(
+            user.id, recorder_name,
+            p["amount_twd"], p["amount_original"],
+            p["currency"], p["exchange_rate"],
+            p["category"], p["note"]
+        )
+        
+        cat_icon = classifier.get_icon(p["category"])
+        reply_text = (
+            f"🎙️ *語音記帳成功！*\n"
+            f"🗣️ 語音辨識：`{transcribed_text}`\n\n"
+            f"{cat_icon} {p['note']}: {fmt_money(p['amount_twd'])} ({recorder_name})"
+        )
+        await status_msg.edit_text(reply_text, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Voice handling error: {e}", exc_info=True)
+        await status_msg.edit_text("⚠️ 語音辨識處理失敗，請稍後再試。")
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
@@ -273,7 +424,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
 # ── 每日定時推送任務 ────────────────────────────────────────
 
 async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """每日定時推送當日及當月支出摘要"""
+    """每日定時推送當日及當月支出摘要，週日自動附帶 AI 財務週報洞察"""
     try:
         logger.info("🚀 開始執行每日自動推送任務")
         bot = context.bot
@@ -292,7 +443,14 @@ async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
 
         msg += f"\n\n📊 *本月累計支出：{fmt_money(month_total)}*"
 
-        # 若未設定白名單，則無法決定推送目標，故僅對白名單內的使用者推送
+        # 功能 6：每週日自動附帶 AI 財務週報洞察
+        now_tw = datetime.now(timezone(timedelta(hours=8)))
+        if now_tw.weekday() == 6:  # 0=週一, 6=週日
+            m_data = db.get_month_detail_summary()
+            insight = await ai.generate_financial_insight(m_data)
+            if insight:
+                msg += f"\n\n🌟 *本週 AI 財務管家洞察評語*：\n{insight}"
+
         targets = ALLOWED_USER_IDS or set(USER_NAME_MAP.keys())
         for user_id in targets:
             try:
@@ -351,10 +509,11 @@ async def post_init(application: Application) -> None:
     logger.info("✅ 已清除舊有 Webhook 狀態")
 
     commands = [
-        BotCommand("today", "📊 查看今日消費摘要"),
+        BotCommand("today", "📊 查看今日消費統計"),
+        BotCommand("month", "📅 查看本月消費概況與洞察"),
         BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
         BotCommand("id", "🧑‍💻 查看您的 Telegram ID"),
-        BotCommand("start", "🏠 顯示使用說明"),
+        BotCommand("start", "🏠 顯示使用說明與鍵盤"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("✅ 指令選單已註冊完成")
@@ -372,14 +531,18 @@ def main():
         .build()
     )
 
-    # 註冊 Handlers
+    # 註冊指令 Handlers
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("id", cmd_id))
     application.add_handler(CommandHandler("today", cmd_today))
+    application.add_handler(CommandHandler("month", cmd_month))  # 功能 1
     application.add_handler(CommandHandler("del", cmd_del))
     application.add_handler(CallbackQueryHandler(handle_callback))
+    
+    # 註冊訊息 Handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
+    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))  # 功能 5 語音記帳
 
     # 排程任務 (每日台灣時間 23:58 推送總結)
     if application.job_queue:
@@ -387,8 +550,7 @@ def main():
         application.job_queue.run_daily(daily_summary_push, time=run_time)
         logger.info(f"⏰ 已設定每日定時推送：台灣時間 {run_time.strftime('%H:%M')}")
 
-    logger.info("🚀 夫妻記帳本 Bot 正式啟動（Polling 模式運行中）...")
-    # drop_pending_updates=True 確保啟動時忽略離線期間的舊封包，立即進入最新狀態
+    logger.info("🚀 夫妻記帳本 Bot 正式啟動（支援 Polling + 語音 + 本月統計 + 常駐按鈕）...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":

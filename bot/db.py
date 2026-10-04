@@ -139,3 +139,60 @@ def get_current_month_total(target_date: str | None = None) -> float:
         .execute()
     )
     return sum(r["amount_twd"] for r in (result.data or []))
+
+
+def get_month_detail_summary(target_date: str | None = None) -> dict:
+    """取得當月詳細統計（總支出、兩人分攤、類別排行及筆數）"""
+    sb = get_client()
+    if target_date:
+        try:
+            if "T" in target_date:
+                now = datetime.fromisoformat(target_date.replace("Z", "+00:00")).astimezone(TW)
+            else:
+                now = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=TW)
+        except Exception:
+            now = datetime.now(TW)
+    else:
+        now = datetime.now(TW)
+        if now.day == 1 and now.hour < 4:
+            now = now - timedelta(days=1)
+
+    year, month = now.year, now.month
+    start = f"{year}-{month:02d}-01T00:00:00+08:00"
+    if month == 12:
+        end = f"{year + 1}-01-01T00:00:00+08:00"
+    else:
+        end = f"{year}-{month + 1:02d}-01T00:00:00+08:00"
+
+    result = (
+        sb.table("expenses")
+        .select("*")
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    expenses = result.data or []
+    total = sum(e["amount_twd"] for e in expenses)
+
+    by_user = {}
+    by_cat = {}
+    for e in expenses:
+        name = e.get("user_name", "User")
+        amt = e.get("amount_twd", 0)
+        cat = e.get("category", "其他")
+        by_user[name] = by_user.get(name, 0) + amt
+        by_cat[cat] = by_cat.get(cat, 0) + amt
+
+    sorted_cats = sorted(by_cat.items(), key=lambda x: x[1], reverse=True)
+
+    return {
+        "year": year,
+        "month": month,
+        "total": total,
+        "count": len(expenses),
+        "by_user": by_user,
+        "by_cat": sorted_cats,
+        "expenses": expenses,
+    }
+
