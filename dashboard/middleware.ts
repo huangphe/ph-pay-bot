@@ -14,9 +14,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 2. 檢查是否有 Magic Token (例如從 Telegram Bot 點擊直連)
+  const magicToken = request.nextUrl.searchParams.get("token");
+  if (magicToken) {
+    return NextResponse.redirect(new URL(`/api/auth/token?token=${magicToken}`, request.url));
+  }
+
   const session = request.cookies.get("family_session")?.value;
 
-  // 2. 若正在訪問登入頁
+  // 3. 若正在訪問登入頁
   if (pathname === "/login") {
     // 若已有 session，直接導向首頁
     if (session && session.split(".").length === 3) {

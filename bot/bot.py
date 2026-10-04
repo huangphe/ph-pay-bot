@@ -81,6 +81,15 @@ def fmt_time(dt_str: str) -> str:
     except Exception:
         return ""
 
+def create_dashboard_token(user_id: int) -> str:
+    """建立與 Web 儀表板相容的 HMAC-SHA256 免密碼安全登入憑證"""
+    import hmac, hashlib, time
+    secret = os.environ.get("AUTH_SECRET", "couple_wealth_family_secret_key_2026_xyz")
+    ts = int(time.time())
+    data = f"{user_id}.{ts}"
+    sig = hmac.new(secret.encode("utf-8"), data.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{data}.{sig}"
+
 def build_category_keyboard(selected: str | None = None) -> InlineKeyboardMarkup:
     cats = ["食", "衣", "住", "行", "育", "樂", "其他"]
     buttons = []
@@ -172,7 +181,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "• /month - 查看本月詳細概況與 AI 財務評語\n"
         "• /del - 刪除最後一筆紀錄\n"
         "• /id - 查看個人 Telegram ID\n\n"
-        f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL}?token={PUSH_TOKEN})"
+        f"🔗 [點我一鍵免密碼進入儀表板]({DASHBOARD_URL.rstrip('/')}/api/auth/token?token={create_dashboard_token(update.effective_user.id)})"
     )
     if update.message:
         await update.message.reply_text(
@@ -279,7 +288,13 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
         await cmd_del(update, ctx)
         return
     elif full_text == "🌐 開啟儀表板":
-        dashboard_msg = f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL}?token={PUSH_TOKEN})"
+        token = create_dashboard_token(user.id)
+        dashboard_url = f"{DASHBOARD_URL.rstrip('/')}/api/auth/token?token={token}"
+        dashboard_msg = (
+            "💎 *專屬家庭財富儀表板*\n\n"
+            f"🔗 [點我一鍵免密碼進入儀表板]({dashboard_url})\n\n"
+            "💡 *提示*：此專屬連結已自動為您綁定 30 天安全憑證，點擊即可直達儀表板，無需輸入密碼！"
+        )
         await update.message.reply_text(dashboard_msg, parse_mode="Markdown", disable_web_page_preview=True)
         return
     
