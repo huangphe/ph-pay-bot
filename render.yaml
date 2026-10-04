@@ -4,6 +4,7 @@ services:
     rootDir: bot
     runtime: docker
     plan: free
+    autoDeploy: true
     healthCheckPath: /
     envVars:
       - key: TELEGRAM_TOKEN
