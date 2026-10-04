@@ -1,15 +1,14 @@
 """
-夫妻記帳本 — Telegram Bot (Render Webhook 版)
+夫妻記帳本 — Telegram Bot (純 Polling 輪詢版)
+專為 Railway Worker、VPS、本機或 Docker 長駐設計，免 Webhook、免公網域名、無休眠阻礙
 """
 
 import os
 import re
 import logging
-import asyncio
 from datetime import datetime, timezone, timedelta, time
-from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 
-from fastapi import FastAPI, Request, Response
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -21,15 +20,19 @@ import classifier
 import ai
 import currency as fx
 
-# ── 設定 ──────────────────────────────────────────────────
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
-DASHBOARD_URL  = os.environ.get("DASHBOARD_URL", "https://your-app.vercel.app")
-RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "") # Render 自動提供的網址
+# 載入 .env（若存在）
+load_dotenv()
 
+# ── 設定 ──────────────────────────────────────────────────
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
+DASHBOARD_URL  = os.environ.get("DASHBOARD_URL", "https://dashboard-eight-woad-51.vercel.app").strip()
+PUSH_TOKEN     = os.environ.get("PUSH_TOKEN", "default_token_please_change").strip()
+
+# 允許的使用者 ID（逗號分隔，若未設定則不限制）
+raw_ids = os.environ.get("ALLOWED_USER_IDS", "")
 ALLOWED_USER_IDS: set[int] = set(
-    int(x) for x in os.environ.get("ALLOWED_USER_IDS", "").split(",") if x.strip()
+    int(x.strip()) for x in raw_ids.split(",") if x.strip().isdigit()
 )
-PUSH_TOKEN = os.environ.get("PUSH_TOKEN", "default_token_please_change")
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -37,10 +40,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-bot_ready_event = asyncio.Event()
-
 # ── 紀錄者名稱對照表 ──────────────────────────────────────
-# 請將 Telegram ID 對照到您想要的名稱
+# 可將 Telegram ID 映射至暱稱標籤
 USER_NAME_MAP = {
     5725029188: "@HAO",
     8514343851: "@WU",
@@ -49,7 +50,8 @@ USER_NAME_MAP = {
 # ── 工具函數 ───────────────────────────────────────────────
 
 def is_allowed(user_id: int) -> bool:
-    if not ALLOWED_USER_IDS: return True
+    if not ALLOWED_USER_IDS:
+        return True
     return user_id in ALLOWED_USER_IDS
 
 def fmt_money(amount: float) -> str:
@@ -60,7 +62,8 @@ def fmt_time(dt_str: str) -> str:
         dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         dt_tw = dt.astimezone(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)
         return dt_tw.strftime("%H:%M")
-    except Exception: return ""
+    except Exception:
+        return ""
 
 def build_category_keyboard(selected: str | None = None) -> InlineKeyboardMarkup:
     cats = ["食", "衣", "住", "行", "育", "樂", "其他"]
@@ -76,10 +79,10 @@ def build_category_keyboard(selected: str | None = None) -> InlineKeyboardMarkup
 
 async def parse_quick_add(text: str) -> dict | None:
     text = text.strip()
-    if not text: return None
+    if not text:
+        return None
     
     # 1. 日期過濾：若字串開頭是 10/17 或 4-12，先將其移除以避免誤判為金額
-    # 優化：支援 10 / 17 (空格) 格式
     text = re.sub(r"^\d{1,2}\s*[/\-]\s*\d{1,2}\s*", "", text).strip()
     
     # 2. 解析金額與內容
@@ -87,25 +90,28 @@ async def parse_quick_add(text: str) -> dict | None:
     match_end   = re.match(r"^(.*?)\s*(\d+(?:\.\d{1,2})?)$", text)
     
     if match_end:
-        # 優先權：若結尾有數字，通常是金額 (如 「茶葉蛋 17」)
         amount_raw = float(match_end.group(2))
         rest = match_end.group(1).strip()
     elif match_start:
-        # 若開頭有數字，則視為金額 (如 「17 茶葉蛋」)
         amount_raw = float(match_start.group(1))
         rest = match_start.group(2).strip()
     else:
         return None
         
-    tokens = rest.split(); currency_code = "TWD"; explicit_category = None; note = rest
+    tokens = rest.split()
+    currency_code = "TWD"
+    explicit_category = None
+    note = rest
     
     # 檢查幣別
     if tokens:
         detected = fx.parse_currency(tokens[0])
         if detected:
-            currency_code = detected; rest = " ".join(tokens[1:]); tokens = rest.split()
+            currency_code = detected
+            rest = " ".join(tokens[1:])
+            tokens = rest.split()
             
-    # 檢查明確分類：支援「食 晚餐」(空格) 或 「食晚餐」(無空格)
+    # 檢查明確分類
     if rest:
         if tokens and classifier.is_valid_category(tokens[0]):
             explicit_category = tokens[0]
@@ -118,15 +124,20 @@ async def parse_quick_add(text: str) -> dict | None:
 
     rate = await fx.get_twd_rate(currency_code)
     return {
-        "amount_original": amount_raw, "currency": currency_code, "exchange_rate": rate,
-        "amount_twd": amount_raw * rate, "category": explicit_category or classifier.classify(note) if note else "其他",
-        "note": note, "is_foreign": currency_code != "TWD",
+        "amount_original": amount_raw,
+        "currency": currency_code,
+        "exchange_rate": rate,
+        "amount_twd": amount_raw * rate,
+        "category": explicit_category or classifier.classify(note) if note else "其他",
+        "note": note,
+        "is_foreign": currency_code != "TWD",
     }
 
 # ── 指令處理 ────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update.effective_user.id): return
+    if not update.effective_user or not is_allowed(update.effective_user.id):
+        return
     
     welcome_text = (
         "👋 *歡迎使用夫妻記帳本！*\n\n"
@@ -144,38 +155,47 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "• /id - 查看個人 Telegram ID\n\n"
         f"🔗 [點我前往網頁版儀表板]({DASHBOARD_URL}?token={PUSH_TOKEN})"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
+    if update.message:
+        await update.message.reply_text(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def cmd_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f"👤 user_id: `{update.effective_user.id}`", parse_mode="Markdown")
+    if update.effective_user and update.message:
+        await update.message.reply_text(f"🧑‍💻 user_id: `{update.effective_user.id}`", parse_mode="Markdown")
 
 async def cmd_today(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update.effective_user.id): return
+    if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
+        return
     expenses = db.get_today_summary()
-    if not expenses: await update.message.reply_text("📊 今日尚無記帳紀錄。"); return
+    if not expenses:
+        await update.message.reply_text("📊 今日尚無記帳紀錄。")
+        return
     total = sum(e["amount_twd"] for e in expenses)
-    lines = [f"💰 *今日總計：{fmt_money(total)}*"]
+    lines = [f"🌙 *今日累計：{fmt_money(total)}*"]
     for e in expenses:
         name = e.get("user_name", "User").replace("@", "")
         lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 async def cmd_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update.effective_user.id): return
+    if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
+        return
     deleted = db.delete_last_expense(update.effective_user.id)
-    if deleted: await update.message.reply_text(f"🗑️ 已刪除：{deleted['note']} {fmt_money(deleted['amount_twd'])}")
-    else: await update.message.reply_text("⚠️ 無可刪除紀錄。")
+    if deleted:
+        await update.message.reply_text(f"🗑️ 已刪除：{deleted['note']} {fmt_money(deleted['amount_twd'])}")
+    else:
+        await update.message.reply_text("⚠️ 無可刪除紀錄。")
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message or not update.message.text:
+        return
     user = update.effective_user
-    if not is_allowed(user.id): return
     full_text = update.message.text.strip()
-    segments = re.split(r'[,\n，；;]', full_text)
+    segments = re.split(r'[,，\n；;]', full_text)
     results = []
+    
     for s in [seg.strip() for seg in segments if seg.strip()]:
         p = await parse_quick_add(s)
         if p:
-            # 優先使用對照表
             mapped_name = USER_NAME_MAP.get(user.id)
             if mapped_name:
                 recorder_name = mapped_name
@@ -185,8 +205,14 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
                 raw_name = user.full_name or user.username or user.first_name or str(user.id)
                 recorder_name = f"@{raw_name}" if not raw_name.startswith("@") else raw_name
                 
-            record = db.add_expense(user.id, recorder_name, p["amount_twd"], p["amount_original"], p["currency"], p["exchange_rate"], p["category"], p["note"])
+            record = db.add_expense(
+                user.id, recorder_name,
+                p["amount_twd"], p["amount_original"],
+                p["currency"], p["exchange_rate"],
+                p["category"], p["note"]
+            )
             results.append((p, record.get("id")))
+
     if results:
         msg = f"✅ 成功記錄 {len(results)} 筆！\n" + "\n".join([
             f"{classifier.get_icon(p[0]['category'])} {p[0]['note']}: {fmt_money(p[0]['amount_twd'])} ({p[1] if isinstance(p[1], str) else recorder_name})" 
@@ -195,171 +221,138 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_allowed(update.effective_user.id): return
+    if not update.effective_user or not is_allowed(update.effective_user.id) or not update.message:
+        return
+    
     photo = update.message.photo[-1] if update.message.photo else update.message.document
+    if not photo:
+        return
+        
     status_msg = await update.message.reply_text("🔍 *正在辨識發票...*", parse_mode="Markdown")
     try:
-        file = await photo.get_file()
         import io
+        file = await photo.get_file()
         buf = io.BytesIO()
         await file.download_to_memory(out=buf)
         img_bytes = buf.getvalue()
         result = await ai.analyze_receipt(img_bytes)
-        if result and result["success"]:
+        
+        if result and result.get("success"):
             auto_cat = classifier.classify(result["note"])
-            db.add_expense(update.effective_user.id, update.effective_user.full_name or "User", result["amount"], result["amount"], "TWD", 1.0, auto_cat, result["note"])
-            await status_msg.edit_text(f"📸 *辨識成功！*\n{classifier.get_icon(auto_cat)} {result['note']}\n💰 {fmt_money(result['amount'])}", parse_mode="Markdown")
-        else: await status_msg.edit_text("❌ 辨識失敗，請手動輸入。")
+            db.add_expense(
+                update.effective_user.id,
+                update.effective_user.full_name or "User",
+                result["amount"], result["amount"],
+                "TWD", 1.0,
+                auto_cat, result["note"]
+            )
+            await status_msg.edit_text(
+                f"📸 *辨識成功！*\n{classifier.get_icon(auto_cat)} {result['note']}\n💵 {fmt_money(result['amount'])}",
+                parse_mode="Markdown"
+            )
+        else:
+            await status_msg.edit_text("❌ 辨識失敗，請手動輸入。")
     except Exception as e:
         logger.error(f"Photo error: {e}")
-        await status_msg.edit_text("⚠️ 系統忙碌中，請稍後再試。")
+        await status_msg.edit_text("⚠️ 系統繁忙中，請稍後再試。")
 
 async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query; await query.answer(); data = query.data
+    if not update.callback_query:
+        return
+    query = update.callback_query
+    await query.answer()
+    data = query.data or ""
     if data.startswith("cat:"):
-        new_cat = data.split(":")[1]; expense_id = ctx.user_data.get("editing_expense_id")
+        new_cat = data.split(":")[1]
+        expense_id = ctx.user_data.get("editing_expense_id") if ctx.user_data else None
         if expense_id:
             db.get_client().table("expenses").update({"category": new_cat}).eq("id", expense_id).execute()
             await query.edit_message_text(f"✅ 類別已更新為 {new_cat}")
 
-# ── Webhook & FastAPI ──────────────────────────────────────
+# ── 每日定時推送任務 ────────────────────────────────────────
 
-# 初始化 Telegram Application (不啟動 Polling)
-t_app = Application.builder().token(TELEGRAM_TOKEN).build()
-t_app.add_handler(CommandHandler("start", cmd_start))
-t_app.add_handler(CommandHandler("id", cmd_id))
-t_app.add_handler(CommandHandler("today", cmd_today))
-t_app.add_handler(CommandHandler("del", cmd_del))
-t_app.add_handler(CallbackQueryHandler(handle_callback))
-t_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-t_app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
-
-async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE = None, bot = None, target_date: str | None = None) -> None:
-    """每日定時推播當日及當月支出摘要"""
+async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """每日定時推送當日及當月支出摘要"""
     try:
-        logger.info(f"🚀 開始執行每日自動推播任務 (目標日期: {target_date or '自動判定'})")
-        
-        # 優先使用參數傳入的 bot，其次使用 context.bot，最後使用全域 t_app.bot
-        actual_bot = bot if bot else (context.bot if context else t_app.bot)
-        
-        if not actual_bot:
-            logger.error("❌ 無法取得 Bot 實體，推播中止")
-            return
-
-        expenses = db.get_today_summary(target_date=target_date)
-        month_total = db.get_current_month_total(target_date=target_date)
+        logger.info("🚀 開始執行每日自動推送任務")
+        bot = context.bot
+        expenses = db.get_today_summary()
+        month_total = db.get_current_month_total()
         
         if not expenses:
             msg = "🌙 *今日結算*\n今日無支出紀錄，早點休息吧！"
-            logger.info("ℹ️ 今日無支出紀錄")
         else:
             total = sum(e["amount_twd"] for e in expenses)
             lines = [f"🌙 *今日支出結算：{fmt_money(total)}*"]
             for e in expenses:
-                # 移除 @ 符號避免二次 tag，保持整潔
                 name = e.get("user_name", "User").replace("@", "")
                 lines.append(f"• {classifier.get_icon(e['category'])} {e['note'] or e['category']}: {fmt_money(e['amount_twd'])} (@{name})")
             msg = "\n".join(lines)
-            logger.info(f"✅ 已生成摘要，共 {len(expenses)} 筆支出")
 
-        # 加入當月累計資訊
         msg += f"\n\n📊 *本月累計支出：{fmt_money(month_total)}*"
 
-        for user_id in ALLOWED_USER_IDS:
+        # 若未設定白名單，則無法決定推送目標，故僅對白名單內的使用者推送
+        targets = ALLOWED_USER_IDS or set(USER_NAME_MAP.keys())
+        for user_id in targets:
             try:
-                await actual_bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
-                logger.info(f"📤 已向 ID:{user_id} 發送推播")
+                await bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
+                logger.info(f"📨 已向 ID:{user_id} 發送推送")
             except Exception as e:
-                logger.error(f"❌ 發送每日推播失敗 (user_id: {user_id}): {e}")
+                logger.error(f"❌ 發送每日推送失敗 (user_id: {user_id}): {e}")
                 
     except Exception as e:
-        logger.error(f"🔥 daily_summary_push 發生未預期錯誤: {e}", exc_info=True)
+        logger.error(f"💥 daily_summary_push 發生未預期錯誤: {e}", exc_info=True)
 
-async def setup_bot():
-    """異步完成 Bot 的重型初始化工作，不阻塞 FastAPI 啟動"""
-    try:
-        logger.info("🤖 開始背景初始化 Bot...")
-        
-        # 1. 基礎初始化
-        await t_app.initialize()
-        await t_app.start()
-        logger.info("✅ Bot 核心實例已啟動")
+# ── 生命週期管理 ────────────────────────────────────────────
 
-        # 2. 註冊指令選單
-        commands = [
-            BotCommand("today", "📊 查看今日消費摘要"),
-            BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
-            BotCommand("id", "👤 查看您的 Telegram ID"),
-            BotCommand("start", "🏠 顯示使用幫助")
-        ]
-        await t_app.bot.set_my_commands(commands)
-        logger.info("✅ 指令選單已更新")
-
-        # 3. 設定 Webhook (確保網址正確)
-        url = RENDER_EXTERNAL_URL
-        if url:
-            if not url.startswith("http"):
-                url = f"https://{url}"
-            webhook_url = f"{url.rstrip('/')}/webhook"
-            logger.info(f"🌐 正在註冊 Webhook: {webhook_url}")
-            await t_app.bot.set_webhook(url=webhook_url)
-            logger.info("✅ Webhook 註冊成功")
-        else:
-            logger.warning("⚠️ 未設定 RENDER_EXTERNAL_URL，Webhook 可能無法運作")
-
-        # 4. 註冊每日定時推播
-        if t_app.job_queue:
-            run_time = time(23, 58, 0, tzinfo=timezone(timedelta(hours=8)))
-            # 先移除舊的避免重複 (雖然 initialize 應該會處理)
-            t_app.job_queue.run_daily(daily_summary_push, time=run_time)
-            logger.info(f"⏰ 已排程每日推播任務：{run_time}")
-        
-        bot_ready_event.set()
-        logger.info("🚀 Bot 全面就緒！")
-
-    except Exception as e:
-        logger.error(f"❌ Bot 初始化過程發生錯誤: {e}", exc_info=True)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("🛠️ FastAPI 服務啟動中...")
+async def post_init(application: Application) -> None:
+    """Bot 啟動後設置選單指令並清理殘留的 Webhook"""
+    logger.info("🔧 正在初始化 Bot 設定...")
     
-    # 將 Bot 初始化丟到背景執行，讓 FastAPI 立即開始監聽 Port
-    import asyncio
-    setup_task = asyncio.create_task(setup_bot())
-    
-    yield
-    
-    logger.info("🛑 服務關閉中...")
-    setup_task.cancel()
-    await t_app.stop()
-    await t_app.shutdown()
+    # 關鍵：若之前有設定過 Webhook，刪除它以確保 Polling 能正常接收訊息
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    logger.info("✅ 已清除舊有 Webhook 狀態")
 
-app = FastAPI(lifespan=lifespan)
+    commands = [
+        BotCommand("today", "📊 查看今日消費摘要"),
+        BotCommand("del", "🗑️ 刪除最後一筆紀錄"),
+        BotCommand("id", "🧑‍💻 查看您的 Telegram ID"),
+        BotCommand("start", "🏠 顯示使用說明"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("✅ 指令選單已註冊完成")
 
-@app.get("/")
-async def index():
-    return {"status": "ok", "bot": "PH_Pay_Bot"}
+def main():
+    if not TELEGRAM_TOKEN:
+        logger.error("❌ 找不到 TELEGRAM_TOKEN！請在環境變數或 .env 填入有效的 Bot Token。")
+        return
 
-@app.get("/api/push-daily-summary")
-async def trigger_push(token: str = "", date: str | None = None):
-    if not PUSH_TOKEN or token != PUSH_TOKEN:
-        return Response(content="Unauthorized", status_code=401)
-    
-    # 確保 Bot 已經初始化完畢 (避免喚醒瞬間並行呼叫導致未初始化錯誤)
-    await bot_ready_event.wait()
-    
-    await daily_summary_push(target_date=date)
-    return {"status": "success", "message": f"Push triggered for date: {date or 'auto'}"}
+    logger.info("🤖 正在建立 Telegram Application...")
+    application = (
+        Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
-@app.post("/webhook")
-async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, t_app.bot)
-    await t_app.process_update(update)
-    return Response(status_code=200)
+    # 註冊 Handlers
+    application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CommandHandler("id", cmd_id))
+    application.add_handler(CommandHandler("today", cmd_today))
+    application.add_handler(CommandHandler("del", cmd_del))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
+
+    # 排程任務 (每日台灣時間 23:58 推送總結)
+    if application.job_queue:
+        run_time = time(23, 58, 0, tzinfo=timezone(timedelta(hours=8)))
+        application.job_queue.run_daily(daily_summary_push, time=run_time)
+        logger.info(f"⏰ 已設定每日定時推送：台灣時間 {run_time.strftime('%H:%M')}")
+
+    logger.info("🚀 夫妻記帳本 Bot 正式啟動（Polling 模式運行中）...")
+    # drop_pending_updates=True 確保啟動時忽略離線期間的舊封包，立即進入最新狀態
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    main()

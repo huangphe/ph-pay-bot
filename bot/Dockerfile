@@ -11,7 +11,6 @@ COPY . .
 
 # 設定環境變數
 ENV PYTHONUNBUFFERED=1
-ENV PORT=10000
 
-# 啟動命令
-CMD ["uvicorn", "bot:app", "--host", "0.0.0.0", "--port", "10000"]
+# 啟動命令（純 Python 進程）
+CMD ["python", "bot.py"]
