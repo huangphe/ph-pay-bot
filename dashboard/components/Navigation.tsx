@@ -14,6 +14,7 @@ import {
   ReceiptText,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { APP_VERSION } from "@/lib/supabase";
 
@@ -50,6 +51,13 @@ export default function Navigation() {
     return `transition-colors ${
       isActive ? "text-brand-400" : "text-zinc-500 group-hover:text-brand-400"
     }`;
+  };
+
+  const handleLogout = async () => {
+    if (confirm("確定要登出家庭財務儀表板嗎？")) {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    }
   };
 
   return (
@@ -126,8 +134,15 @@ export default function Navigation() {
         </div>
 
         {/* Footer */}
-        <div className="px-3 pt-4 border-t border-white/5">
-          <div className="flex items-center justify-between text-[9px] text-zinc-700 font-medium uppercase tracking-tighter">
+        <div className="px-3 pt-4 border-t border-white/5 space-y-2">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all font-medium"
+          >
+            <LogOut size={14} />
+            <span>安全登出</span>
+          </button>
+          <div className="flex items-center justify-between text-[9px] text-zinc-700 font-medium uppercase tracking-tighter px-1">
             <span>{APP_VERSION}</span>
             <span>Cloud Syncing</span>
           </div>
