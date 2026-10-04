@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, ShieldCheck, KeyRound, AlertCircle, ArrowRight } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -178,3 +178,18 @@ export default function LoginPage() {
     </div>
   );
 }
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500 text-xs font-mono">
+          載入登入介面中...
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}
+
