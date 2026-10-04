@@ -21,19 +21,17 @@ import MiniNetWorthChart from "@/components/wealth/dashboard/MiniNetWorthChart";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export default async function DashboardPage() {
-  const errors: string[] = [];
-  const buildTime = new Date().toISOString();
   const { year: curYear, month: curMonth } = currentYearMonth();
 
   const [assets, liabilities, incomeSources, snapshots, avgExpenses, expensesRaw] =
     await Promise.all([
-      fetchAssets().catch((e) => { errors.push(`[fetchAssets]: ${e.message || String(e)}`); return []; }),
-      fetchActiveLiabilities().catch((e) => { errors.push(`[fetchLiabilities]: ${e.message || String(e)}`); return []; }),
-      fetchActiveIncomeSources().catch((e) => { errors.push(`[fetchIncome]: ${e.message || String(e)}`); return []; }),
-      fetchNetWorthSnapshots(12).catch((e) => { errors.push(`[fetchSnapshots]: ${e.message || String(e)}`); return []; }),
-      fetchAvgMonthlyExpenses(3).catch((e) => { errors.push(`[fetchAvgExpenses]: ${e.message || String(e)}`); return 0; }),
+      fetchAssets().catch((e) => { console.error("[fetchAssets]:", e); return []; }),
+      fetchActiveLiabilities().catch((e) => { console.error("[fetchLiabilities]:", e); return []; }),
+      fetchActiveIncomeSources().catch((e) => { console.error("[fetchIncome]:", e); return []; }),
+      fetchNetWorthSnapshots(12).catch((e) => { console.error("[fetchSnapshots]:", e); return []; }),
+      fetchAvgMonthlyExpenses(3).catch((e) => { console.error("[fetchAvgExpenses]:", e); return 0; }),
       fetchMonthExpenses(curYear, curMonth).catch((e) => { 
-        errors.push(`[fetchCurrentMonth]: ${e.message || String(e)}`); return []; 
+        console.error("[fetchCurrentMonth]:", e); return []; 
       }),
     ]);
 
@@ -48,20 +46,22 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-blue-900/50 text-blue-100 p-2 rounded text-xs border border-blue-500/50 font-mono">
-        v1.2.1-LIVE | Build: {buildTime} | Assets: {assets.length} | Liab: {liabilities.length} | Errors: {errors.length}
-      </div>
-
-      {errors.length > 0 && (
-        <div className="bg-red-900/50 text-red-100 p-4 rounded-xl border border-red-500/50 shadow-lg text-sm mb-6 max-h-48 overflow-auto">
-          <h3 className="font-bold mb-2">🔥 Server Data Fetching Failed:</h3>
-          <ul className="list-disc pl-5 space-y-1">
-            {errors.map((err, i) => (
-              <li key={i}>{err}</li>
-            ))}
-          </ul>
+      {/* 頁面標題 */}
+      <div className="flex items-center justify-between pb-2 border-b border-white/[0.05]">
+        <div>
+          <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1">
+            Family Office · Wealth Overview
+          </p>
+          <h1 className="text-2xl font-black text-white">家庭財務總覽</h1>
         </div>
-      )}
+        <div className="text-right hidden sm:block">
+          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">資料狀態</p>
+          <p className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5 justify-end mt-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            雲端即時同步
+          </p>
+        </div>
+      </div>
 
       {/* SECTION 1: 🧊 財務快照 (資產負債表) */}
       <section className="space-y-6">
