@@ -4,6 +4,7 @@ services:
     rootDir: bot
     runtime: docker
     plan: free
+    healthCheckPath: /
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
@@ -17,8 +18,3 @@ services:
         value: 5725029188,8514343851
       - key: DASHBOARD_URL
         value: https://dashboard-eight-woad-51.vercel.app
-      - key: RENDER_EXTERNAL_URL
-        fromService:
-          name: ph-pay-bot
-          type: web
-          property: host

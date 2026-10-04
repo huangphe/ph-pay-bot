@@ -6,6 +6,7 @@
 import os
 import re
 import logging
+import asyncio
 from datetime import datetime, timezone, timedelta, time
 from dotenv import load_dotenv
 
@@ -303,13 +304,49 @@ async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"💥 daily_summary_push 發生未預期錯誤: {e}", exc_info=True)
 
+# ── Render HTTP 存活檢查服務 ─────────────────────────────
+
+async def _handle_http_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    try:
+        await reader.readline()
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: application/json; charset=utf-8\r\n"
+            b"Content-Length: 32\r\n"
+            b"Connection: close\r\n\r\n"
+            b'{"status":"ok","bot":"ph-pay-bot"}'
+        )
+        writer.write(response)
+        await writer.drain()
+    except Exception:
+        pass
+    finally:
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+async def start_http_server(port: int) -> None:
+    try:
+        server = await asyncio.start_server(_handle_http_client, "0.0.0.0", port)
+        logger.info(f"🌐 Render 存活檢查 HTTP 伺服器已啟動於 0.0.0.0:{port}")
+        async with server:
+            await server.serve_forever()
+    except Exception as e:
+        logger.error(f"❌ HTTP 伺服器啟動失敗: {e}")
+
 # ── 生命週期管理 ────────────────────────────────────────────
 
 async def post_init(application: Application) -> None:
-    """Bot 啟動後設置選單指令並清理殘留的 Webhook"""
+    """Bot 啟動後設置選單指令、清理殘留 Webhook 並啟動 HTTP 存活檢查端口"""
     logger.info("🔧 正在初始化 Bot 設定...")
     
-    # 關鍵：若之前有設定過 Webhook，刪除它以確保 Polling 能正常接收訊息
+    # 1. 啟動輕量原生 HTTP 伺服器供 Render 進行健康檢查及防止休眠
+    port = int(os.environ.get("PORT", 10000))
+    asyncio.create_task(start_http_server(port))
+    
+    # 2. 清理舊有 Webhook
     await application.bot.delete_webhook(drop_pending_updates=True)
     logger.info("✅ 已清除舊有 Webhook 狀態")
 
