@@ -32,6 +32,8 @@ load_dotenv()
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 DASHBOARD_URL  = os.environ.get("DASHBOARD_URL", "https://dashboard-eight-woad-51.vercel.app").strip()
 PUSH_TOKEN     = os.environ.get("PUSH_TOKEN", "default_token_please_change").strip()
+WEBHOOK_URL    = os.environ.get("WEBHOOK_URL", os.environ.get("RENDER_EXTERNAL_URL", "")).strip()
+PORT           = int(os.environ.get("PORT", 10000))
 
 # 允許的使用者 ID（逗號分隔，若未設定則不限制）
 raw_ids = os.environ.get("ALLOWED_USER_IDS", "")
@@ -462,52 +464,64 @@ async def daily_summary_push(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"💥 daily_summary_push 發生未預期錯誤: {e}", exc_info=True)
 
-# ── Render HTTP 存活檢查服務 ─────────────────────────────
+# ── 生命週期管理與 Webhook 伺服器 ───────────────────────────
 
-async def _handle_http_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    try:
-        await reader.readline()
-        response = (
-            b"HTTP/1.1 200 OK\r\n"
-            b"Content-Type: application/json; charset=utf-8\r\n"
-            b"Content-Length: 32\r\n"
-            b"Connection: close\r\n\r\n"
-            b'{"status":"ok","bot":"ph-pay-bot"}'
-        )
-        writer.write(response)
-        await writer.drain()
-    except Exception:
-        pass
-    finally:
+async def run_webhook_server(application: Application, port: int, webhook_base_url: str) -> None:
+    from aiohttp import web
+
+    webhook_path = "/webhook"
+    webhook_full_url = f"{webhook_base_url.rstrip('/')}{webhook_path}"
+
+    logger.info(f"🔗 正在註冊 Telegram Webhook 至: {webhook_full_url} ...")
+    await application.bot.set_webhook(
+        url=webhook_full_url,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=False,
+    )
+    logger.info("✅ Telegram Webhook 設定成功！")
+
+    app = web.Application()
+
+    async def handle_health(request: web.Request) -> web.Response:
+        return web.json_response({
+            "status": "ok",
+            "bot": "ph-pay-bot",
+            "mode": "webhook",
+            "webhook_url": webhook_full_url,
+        })
+
+    async def handle_webhook(request: web.Request) -> web.Response:
         try:
-            writer.close()
-            await writer.wait_closed()
-        except Exception:
-            pass
+            data = await request.json()
+            update = Update.de_json(data=data, bot=application.bot)
+            if update:
+                # 異步派發處理，立即返回 200 OK 避免 Telegram 逾時重試
+                asyncio.create_task(application.process_update(update))
+        except Exception as e:
+            logger.error(f"❌ 處理 Webhook 請求失敗: {e}", exc_info=True)
+        return web.Response(text="OK")
 
-async def start_http_server(port: int) -> None:
+    app.router.add_get("/", handle_health)
+    app.router.add_get("/health", handle_health)
+    app.router.add_post(webhook_path, handle_webhook)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"🌐 aiohttp Webhook 伺服器已啟動於 0.0.0.0:{port}")
+
+    # 維持服務常駐運行
     try:
-        server = await asyncio.start_server(_handle_http_client, "0.0.0.0", port)
-        logger.info(f"🌐 Render 存活檢查 HTTP 伺服器已啟動於 0.0.0.0:{port}")
-        async with server:
-            await server.serve_forever()
-    except Exception as e:
-        logger.error(f"❌ HTTP 伺服器啟動失敗: {e}")
+        while True:
+            await asyncio.sleep(3600)
+    finally:
+        await runner.cleanup()
 
-# ── 生命週期管理 ────────────────────────────────────────────
 
 async def post_init(application: Application) -> None:
-    """Bot 啟動後設置選單指令、清理殘留 Webhook 並啟動 HTTP 存活檢查端口"""
-    logger.info("🔧 正在初始化 Bot 設定...")
-    
-    # 1. 啟動輕量原生 HTTP 伺服器供 Render 進行健康檢查及防止休眠
-    port = int(os.environ.get("PORT", 10000))
-    asyncio.create_task(start_http_server(port))
-    
-    # 2. 清理舊有 Webhook
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    logger.info("✅ 已清除舊有 Webhook 狀態")
-
+    """Bot 啟動後設置選單指令"""
+    logger.info("🔧 正在初始化 Bot 指令清單...")
     commands = [
         BotCommand("today", "📊 查看今日消費統計"),
         BotCommand("month", "📅 查看本月消費概況與洞察"),
@@ -518,7 +532,8 @@ async def post_init(application: Application) -> None:
     await application.bot.set_my_commands(commands)
     logger.info("✅ 指令選單已註冊完成")
 
-def main():
+
+async def async_main() -> None:
     if not TELEGRAM_TOKEN:
         logger.error("❌ 找不到 TELEGRAM_TOKEN！請在環境變數或 .env 填入有效的 Bot Token。")
         return
@@ -538,7 +553,7 @@ def main():
     application.add_handler(CommandHandler("month", cmd_month))  # 功能 1
     application.add_handler(CommandHandler("del", cmd_del))
     application.add_handler(CallbackQueryHandler(handle_callback))
-    
+
     # 註冊訊息 Handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
@@ -550,8 +565,32 @@ def main():
         application.job_queue.run_daily(daily_summary_push, time=run_time)
         logger.info(f"⏰ 已設定每日定時推送：台灣時間 {run_time.strftime('%H:%M')}")
 
-    logger.info("🚀 夫妻記帳本 Bot 正式啟動（支援 Polling + 語音 + 本月統計 + 常駐按鈕）...")
-    application.run_polling(drop_pending_updates=True)
+    logger.info("🚀 夫妻記帳本 Bot 正式啟動中...")
+    await application.initialize()
+    await application.start()
 
-if __name__ == "__main__":
-    main()
+    try:
+        if WEBHOOK_URL:
+            logger.info(f"🌐 偵測到 Webhook 網址: {WEBHOOK_URL}，以 Webhook 模式監聽...")
+            await run_webhook_server(application, PORT, WEBHOOK_URL)
+        else:
+            logger.info("🔄 未設定 Webhook 網址，切換為 Polling 輪詢模式...")
+            await application.bot.delete_webhook(drop_pending_updates=False)
+            if application.updater:
+                await application.updater.start_polling(drop_pending_updates=False)
+            while True:
+                await asyncio.sleep(3600)
+    finally:
+        logger.info("🛑 正在優雅關閉 Bot...")
+        if application.updater and application.updater.running:
+            await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+
+
+def main():
+    try:
+        asyncio.run(async_main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("👋 Bot 服務已安全終止")
+

@@ -18,3 +18,5 @@ services:
         value: 5725029188,8514343851
       - key: DASHBOARD_URL
         value: https://dashboard-eight-woad-51.vercel.app
+      - key: WEBHOOK_URL
+        value: https://ph-pay-bot-febv.onrender.com
