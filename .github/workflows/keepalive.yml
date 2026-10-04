@@ -14,7 +14,7 @@ jobs:
         run: |
           URL="${{ secrets.RENDER_BOT_URL }}"
           if [ -z "$URL" ]; then
-            URL="https://ph-pay-bot.onrender.com"
+            URL="https://ph-pay-bot-febv.onrender.com"
           fi
           echo "Pinging $URL..."
           curl -s -f -m 30 "$URL" || echo "Ping request sent (waking up or waiting)"
