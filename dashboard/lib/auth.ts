@@ -10,7 +10,7 @@ export const ALLOWED_USER_IDS = (
 export const BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN ||
   process.env.TELEGRAM_TOKEN ||
-  "8657480621:AAGQ3YSeCVWowGVtiv8ifSnQSfCbve67VN8";
+  "";
 
 export const AUTH_SECRET =
   process.env.AUTH_SECRET || "couple_wealth_family_secret_key_2026_xyz";
@@ -25,6 +25,10 @@ export function verifyTelegramAuth(data: Record<string, string>): {
   user?: { id: string; first_name?: string; username?: string };
   reason?: string;
 } {
+  if (!BOT_TOKEN) {
+    return { valid: false, reason: "伺服器未設定 TELEGRAM_BOT_TOKEN 環境變數" };
+  }
+
   const { hash, ...rest } = data;
   if (!hash) {
     return { valid: false, reason: "缺少驗證 Hash" };
